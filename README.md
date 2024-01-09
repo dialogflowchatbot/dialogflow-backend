@@ -1,6 +1,6 @@
 # Dialog flow chat bot backend
-Hi there.
-This is a sub-project of Dialog flow chat bot
+Hi there.  
+This is a sub-project of [Dialog flow chat bot](https://github.com/dialogflowchatbot/dialogflow)  
 It's written in Rust language
 
 ## How to build this project?
