@@ -66,7 +66,7 @@ pub(crate) async fn save(Json(data): Json<Settings>) -> impl IntoResponse {
 pub(crate) fn save_settings(data: &Settings) -> Result<()> {
     let addr = format!("{}:{}", data.ip, data.port);
     let _: SocketAddr = addr.parse().map_err(|_| {
-        eprintln!("Saving invalid listen IP: {}", &addr);
+        log::error!("Saving invalid listen IP: {}", &addr);
         Error::ErrorWithMessage(String::from("lang.settings.invalidIp"))
     })?;
     db::write(TABLE, SETTINGS_KEY, &data)

@@ -182,7 +182,7 @@ impl Variable {
                                     _ => None,
                                 },
                                 Err(e) => {
-                                    eprintln!("{:?}", e);
+                                    log::error!("{:?}", e);
                                     None
                                 }
                             },

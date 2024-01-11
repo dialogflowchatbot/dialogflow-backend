@@ -127,7 +127,7 @@ pub async fn clean_expired_session(
           }
         }
         // sleep(Duration::from_millis(1800000)).await;
-        println!("Cleaning expired sessions");
+        log::info!("Cleaning expired sessions");
         let r: Result<Option<Vec<ContextStatus>>> = db::query(TABLE, CONTEXT_KEY);
         if let Ok(op) = r {
             if let Some(mut d) = op {
@@ -140,18 +140,17 @@ pub async fn clean_expired_session(
                             if now - d[i].create_time > max_sess_dur_sec {
                                 let val = d.remove(i);
                                 if let Err(e) = db::remove(TABLE, val.session_id.as_str()) {
-                                    eprintln!("{:?}", e);
+                                    log::error!("Removing expired session {} failed {:?}", val.session_id, e);
                                 }
-                                println!("Removing expired session:{}", val.session_id);
                             } else {
                                 i += 1;
                             }
                         }
                         if let Err(e) = db::write(TABLE, CONTEXT_KEY, &d) {
-                            eprintln!("{:?}", e);
+                            log::error!("{:?}", e);
                         }
                     }
-                    Err(e) => eprintln!("{:?}", e),
+                    Err(e) => log::error!("{:?}", e),
                 }
             }
         }

@@ -30,6 +30,4 @@ HashMap::from([
 ("/assets/step8-4ffd1e3d.png", 23),
 ("/assets/step9-772a025e.png", 24),
 ("/favicon.ico", 25),
-("/", 26),
-("/index.html", 26),
 ])});

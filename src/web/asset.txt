@@ -25,5 +25,4 @@
 (include_bytes!(r#"..\resources\assets/assets\step8-4ffd1e3d.png.gz"#), ""),
 (include_bytes!(r#"..\resources\assets/assets\step9-772a025e.png.gz"#), ""),
 (include_bytes!(r#"..\resources\assets/favicon.ico.gz"#), "image/x-icon"),
-(include_bytes!(r#"..\resources\assets/index.html.gz"#), "text/html; charset=utf-8"),
 ]

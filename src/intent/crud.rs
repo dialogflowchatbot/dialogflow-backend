@@ -152,7 +152,9 @@ pub(crate) async fn remove(Json(params): Json<IntentFormData>) -> impl IntoRespo
     if let Ok(idx) = params.data.parse() {
         let mut intents: Vec<Intent> = db::query(TABLE, INTENT_LIST_KEY).unwrap().unwrap();
         intents.remove(idx);
-        db::write(TABLE, INTENT_LIST_KEY, &intents);
+        if let Err(e) = db::write(TABLE, INTENT_LIST_KEY, &intents) {
+            log::error!("Update intents list failed: {:?}", &e);
+        }
     }
     to_res(r)
 }
@@ -203,7 +205,7 @@ pub(crate) async fn remove_keyword(Json(params): Json<IntentFormData>) -> impl I
         .data
         .parse::<usize>()
         .map_err(|e| {
-            eprintln!("{:?}", e);
+            log::error!("{:?}", e);
             Error::ErrorWithMessage(String::from("Invalid parameter"))
         })
         .and_then(|idx| {
@@ -248,7 +250,7 @@ pub(crate) async fn remove_regex(Json(params): Json<IntentFormData>) -> impl Int
         .data
         .parse::<usize>()
         .map_err(|e| {
-            eprintln!("{:?}", e);
+            log::error!("{:?}", e);
             Error::ErrorWithMessage(String::from("Invalid parameter"))
         })
         .and_then(|idx| {
@@ -292,7 +294,7 @@ pub(crate) async fn remove_phrase(Json(params): Json<IntentFormData>) -> impl In
         .data
         .parse::<usize>()
         .map_err(|e| {
-            eprintln!("{:?}", e);
+            log::error!("{:?}", e);
             Error::ErrorWithMessage(String::from("Invalid parameter"))
         })
         .and_then(|idx| {

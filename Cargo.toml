@@ -1,6 +1,6 @@
 [package]
 name = "dialogflow"
-version = "1.9.0"
+version = "1.9.1"
 edition = "2021"
 homepage = "https://dialogflowchatbot.github.io/"
 authors = ["dialogflowchatbot <dialogflow@yeah.net>"]
@@ -39,7 +39,9 @@ time = { version = "0.3", features = ["formatting"] }
 tower-http = { version = "0.5", features = ["cors"] }
 # typetag = "0.2"
 tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "rt", "rt-multi-thread", "signal", "time"] }
-tracing-subscriber = "0.3"
+# tracing-subscriber = "0.3"
+log = "0.4.20"
+env_logger = "0.10.1"
 # triple_accel = "0.4.0"
 
 [build-dependencies]

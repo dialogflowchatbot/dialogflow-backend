@@ -28,7 +28,7 @@ const ASSETS: &[(&[u8], &str)] = &include!("asset.txt");
 
 pub(crate) static IS_EN: Lazy<bool> = Lazy::new(|| {
     let language = get_lang();
-    println!("Your OS language is: {}", language);
+    // println!("Your OS language is: {}", language);
     language[0..2].eq("en")
 });
 
@@ -69,7 +69,7 @@ pub async fn start_app() {
     #[cfg(target_os = "windows")]
     let _ = colored::control::set_virtual_terminal(true).unwrap();
 
-    println!(
+    log::info!(
         "  -->  {} {}{}:{}",
         if *IS_EN {
             "Please open a browser and visit"
@@ -80,10 +80,10 @@ pub async fn start_app() {
         settings.ip.bright_green(),
         settings.port.to_string().blue()
     );
-    println!("Current version: {}", VERSION);
-    println!("Visiting https://dialogflowchatbot.github.io/ for the latest releases");
+    log::info!("Current version: {}", VERSION);
+    log::info!("Visiting https://dialogflowchatbot.github.io/ for the latest releases");
 
-    println!(
+    log::info!(
         "  -->  Press {} to terminate this application",
         "Ctrl+C".bright_red()
     );
@@ -200,7 +200,7 @@ fn convert_version(ver: &str) -> u64 {
         v.push_str("0");
     }
     v.push_str(arr[2]);
-    // println!("vernum={}", &v);
+    // log::info!("vernum={}", &v);
     v.parse().expect("Wrong version")
 }
 
@@ -267,7 +267,7 @@ async fn shutdown_signal(sender: tokio::sync::oneshot::Sender<()>) {
 
     match sender.send(()) {
         Ok(_) => {}
-        Err(_) => println!("中断 ctx 失败"),
+        Err(_) => log::info!("中断 ctx 失败"),
     };
 
     let m = if *IS_EN {
@@ -275,7 +275,7 @@ async fn shutdown_signal(sender: tokio::sync::oneshot::Sender<()>) {
     } else {
         "应用已退出"
     };
-    println!("{}", m);
+    log::info!("{}", m);
 }
 
 #[derive(Serialize)]
@@ -310,7 +310,7 @@ where
             // simd_json::to_string(&res).unwrap()
         }
     };
-    // println!("serialize used time:{:?}", now.elapsed());
+    // log::info!("serialize used time:{:?}", now.elapsed());
     let mut header_map = HeaderMap::new();
     header_map.insert(header::CONTENT_TYPE, "application/json".parse().unwrap());
     (StatusCode::OK, header_map, data)

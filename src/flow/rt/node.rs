@@ -93,7 +93,7 @@ impl RuntimeNode for TextNode {
         // let now = std::time::Instant::now();
         match replace_vars(&self.text, &req, ctx) {
             Ok(answer) => response.answers.push(answer),
-            Err(e) => eprintln!("{:?}", e),
+            Err(e) => log::error!("{:?}", e),
         };
         add_next_node(ctx, &self.next_node_id);
         // println!("TextNode used time:{:?}", now.elapsed());
@@ -226,7 +226,7 @@ impl RuntimeNode for ExternalHttpCallNode {
                                 crate::external::http::dto::ResponseData::Bin(_) => {}
                                 crate::external::http::dto::ResponseData::None => {}
                             },
-                            Err(e) => eprintln!("{:?}", e),
+                            Err(e) => log::error!("{:?}", e),
                         }
                     });
                 }
