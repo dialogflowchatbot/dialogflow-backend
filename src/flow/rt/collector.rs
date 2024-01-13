@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use {once_cell::sync::Lazy, regex::Regex};
 
-static NUMBER_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"[1-9][\d]+(.[\d]+)?").unwrap());
+static NUMBER_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"[1-9]([\d]+)?(.[\d]+)?").unwrap());
 
 #[derive(Clone, Deserialize, Serialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[archive(compare(PartialEq), check_bytes)]

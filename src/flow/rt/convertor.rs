@@ -186,7 +186,7 @@ fn convert_node(main_flow_id: &str, node: &Node) -> Result<()> {
                                 compare_type: cond.compare_type,
                                 ref_data: cond.ref_choice.clone(),
                                 target_data: cond.target_value.clone(),
-                                target_data_variant: TargetDataVariant::Const,
+                                target_data_variant: cond.target_value_variant,
                             };
                             and_conditions.push(c);
                         }

@@ -145,6 +145,7 @@ impl RuntimeNode for CollectNode {
     fn exec(&self, req: &Request, ctx: &mut Context, response: &mut Response) -> bool {
         // println!("Into CollectNode");
         if let Some(r) = collector::collect(&req.user_input, &self.collect_type) {
+            // println!("{} {}", &self.var_name, r);
             let v = VariableValue::new(r, &VariableType::Str);
             ctx.vars.insert(self.var_name.clone(), v);
             let collect_data = CollectData {

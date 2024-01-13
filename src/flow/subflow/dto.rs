@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::flow::rt::collector::CollectType;
-use crate::flow::rt::condition::{CompareType, ConditionType};
+use crate::flow::rt::condition::{CompareType, ConditionType, TargetDataVariant};
 use crate::result::{Error, Result};
 
 #[derive(Deserialize)]
@@ -243,6 +243,8 @@ pub(crate) struct BranchCondition {
     pub(crate) compare_type: CompareType,
     #[serde(rename = "targetValue")]
     pub(crate) target_value: String,
+    #[serde(rename = "targetValueVariant")]
+    pub(crate) target_value_variant: TargetDataVariant,
 }
 
 #[derive(Deserialize)]

@@ -10,6 +10,6 @@ pub(crate) async fn answer(Json(mut req): Json<Request>) -> impl IntoResponse {
     let r = executor::process(&mut req);
     // println!("exec used time:{:?}", now.elapsed());
     let res = to_res(r);
-    log::info!("Total response used time:{:?}", now.elapsed());
+    log::info!("Response used time:{:?}", now.elapsed());
     res
 }

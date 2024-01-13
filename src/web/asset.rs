@@ -6,7 +6,7 @@ pub(crate) static ASSETS_MAP: Lazy<HashMap<&str, usize>> = Lazy::new(|| {
 HashMap::from([
 ("/assets/browsers-f6aeadcd.png", 0),
 ("/assets/canvas-dee963ae.png", 1),
-("/assets/CollectNode-b510b7be.png", 2),
+("/assets/collectNode-b510b7be.png", 2),
 ("/assets/compatible-b1748181.png", 3),
 ("/assets/conditionNode-010dcdb6.png", 4),
 ("/assets/diversity-b-35acc628.png", 5),
@@ -15,8 +15,8 @@ HashMap::from([
 ("/assets/flow-14ef8935.png", 8),
 ("/assets/header_bg-9b92bf12.jpg", 9),
 ("/assets/hero_bg-0a348a9f.jpg", 10),
-("/assets/index-a8d4c523.css", 11),
-("/assets/index-cc9d124f.js", 12),
+("/assets/index-769b82be.js", 11),
+("/assets/index-f1ff0580.css", 12),
 ("/assets/link-b-5420aaad.png", 13),
 ("/assets/os-4f42ae1a.png", 14),
 ("/assets/scenarios-4eff812a.png", 15),
@@ -30,4 +30,6 @@ HashMap::from([
 ("/assets/step8-4ffd1e3d.png", 23),
 ("/assets/step9-772a025e.png", 24),
 ("/favicon.ico", 25),
+("/", 26),
+("/index.html", 26),
 ])});

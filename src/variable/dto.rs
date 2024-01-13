@@ -140,6 +140,7 @@ impl Variable {
     ) -> Option<&'b VariableValue> {
         match &self.var_val_source {
             VariableValueSource::Collect | VariableValueSource::Import => {
+                // println!("{:?}", ctx.vars.get(&self.var_name));
                 ctx.vars.get(&self.var_name)
             }
             VariableValueSource::UserInput => {
@@ -195,7 +196,7 @@ impl Variable {
     }
 }
 
-#[derive(Clone, Deserialize, Serialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub(crate) enum VariableValue {
     Str(String),
     Num(f64),
@@ -230,7 +231,7 @@ impl VariableValue {
     }
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize, PartialEq)]
 pub(crate) enum VariableType {
     Str,
     Num,
