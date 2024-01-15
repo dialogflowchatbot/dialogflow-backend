@@ -37,7 +37,9 @@ pub(crate) enum CompareType {
     Timeout,
 }
 
-#[derive(Copy, Clone, Debug, Deserialize, Serialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
+#[derive(
+    Copy, Clone, Debug, Deserialize, Serialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize,
+)]
 #[archive(compare(PartialEq), check_bytes)]
 pub(crate) enum TargetDataVariant {
     Const,
@@ -77,7 +79,9 @@ impl ConditionData {
             ConditionType::UserIntent => {
                 // println!("{} {}", &target_data, req.user_input_intent.is_some());
                 req.user_input_intent.is_some()
-                    && self.get_target_data(req, ctx).eq(req.user_input_intent.as_ref().unwrap())
+                    && self
+                        .get_target_data(req, ctx)
+                        .eq(req.user_input_intent.as_ref().unwrap())
             }
             ConditionType::FlowVariable => match self.compare_type {
                 CompareType::HasValue => {
@@ -90,7 +94,7 @@ impl ConditionData {
                     } else {
                         false
                     }
-                },
+                }
                 CompareType::DoesNotHaveValue => {
                     if let Ok(op) = variable::get(&self.ref_data) {
                         if let Some(v) = op {
@@ -101,7 +105,7 @@ impl ConditionData {
                     } else {
                         true
                     }
-                },
+                }
                 CompareType::EmptyString => {
                     if let Ok(op) = variable::get(&self.ref_data) {
                         if let Some(v) = op {
@@ -117,7 +121,7 @@ impl ConditionData {
                     } else {
                         false
                     }
-                },
+                }
                 CompareType::Eq => {
                     if let Ok(op) = variable::get(&self.ref_data) {
                         if let Some(v) = op {
@@ -132,7 +136,7 @@ impl ConditionData {
                     } else {
                         false
                     }
-                },
+                }
                 CompareType::NotEq => {
                     if let Ok(op) = variable::get(&self.ref_data) {
                         if let Some(v) = op {
@@ -147,7 +151,7 @@ impl ConditionData {
                     } else {
                         true
                     }
-                },
+                }
                 CompareType::Contains => {
                     if let Ok(op) = variable::get(&self.ref_data) {
                         if let Some(v) = op {
@@ -155,10 +159,12 @@ impl ConditionData {
                                 false
                             } else {
                                 if let Some(val) = v.get_value(req, ctx) {
-                                    val.val_to_string().find(&self.get_target_data(req, ctx)).is_some()
+                                    val.val_to_string()
+                                        .find(&self.get_target_data(req, ctx))
+                                        .is_some()
                                 } else {
                                     true
-                                }    
+                                }
                             }
                         } else {
                             true
@@ -166,7 +172,7 @@ impl ConditionData {
                     } else {
                         true
                     }
-                },
+                }
                 CompareType::NotContains => {
                     if let Ok(op) = variable::get(&self.ref_data) {
                         if let Some(v) = op {
@@ -174,10 +180,12 @@ impl ConditionData {
                                 false
                             } else {
                                 if let Some(val) = v.get_value(req, ctx) {
-                                    val.val_to_string().find(&self.get_target_data(req, ctx)).is_none()
+                                    val.val_to_string()
+                                        .find(&self.get_target_data(req, ctx))
+                                        .is_none()
                                 } else {
                                     true
-                                }    
+                                }
                             }
                         } else {
                             true
@@ -185,7 +193,7 @@ impl ConditionData {
                     } else {
                         true
                     }
-                },
+                }
                 CompareType::NGT => {
                     if let Ok(op) = variable::get(&self.ref_data) {
                         if let Some(v) = op {
@@ -195,7 +203,9 @@ impl ConditionData {
                                 if let Some(val) = v.get_value(req, ctx) {
                                     if let Ok(n1) = val.val_to_string().parse::<f64>() {
                                         // println!("get_target_data {} {:?} |{}|", self.target_data, self.target_data_variant, self.get_target_data(req, ctx));
-                                        if let Ok(n2) = self.get_target_data(req, ctx).parse::<f64>() {
+                                        if let Ok(n2) =
+                                            self.get_target_data(req, ctx).parse::<f64>()
+                                        {
                                             // println!("{} {}", n1, n2);
                                             n1 > n2
                                         } else {
@@ -214,7 +224,7 @@ impl ConditionData {
                     } else {
                         false
                     }
-                },
+                }
                 CompareType::NGTE => {
                     if let Ok(op) = variable::get(&self.ref_data) {
                         if let Some(v) = op {
@@ -223,7 +233,9 @@ impl ConditionData {
                             } else {
                                 if let Some(val) = v.get_value(req, ctx) {
                                     if let Ok(n1) = val.val_to_string().parse::<f64>() {
-                                        if let Ok(n2) = self.get_target_data(req, ctx).parse::<f64>() {
+                                        if let Ok(n2) =
+                                            self.get_target_data(req, ctx).parse::<f64>()
+                                        {
                                             n1 >= n2
                                         } else {
                                             false
@@ -241,7 +253,7 @@ impl ConditionData {
                     } else {
                         false
                     }
-                },
+                }
                 CompareType::NLT => {
                     if let Ok(op) = variable::get(&self.ref_data) {
                         if let Some(v) = op {
@@ -250,7 +262,9 @@ impl ConditionData {
                             } else {
                                 if let Some(val) = v.get_value(req, ctx) {
                                     if let Ok(n1) = val.val_to_string().parse::<f64>() {
-                                        if let Ok(n2) = self.get_target_data(req, ctx).parse::<f64>() {
+                                        if let Ok(n2) =
+                                            self.get_target_data(req, ctx).parse::<f64>()
+                                        {
                                             n1 < n2
                                         } else {
                                             false
@@ -268,8 +282,7 @@ impl ConditionData {
                     } else {
                         false
                     }
-
-                },
+                }
                 CompareType::NLTE => {
                     if let Ok(op) = variable::get(&self.ref_data) {
                         if let Some(v) = op {
@@ -278,7 +291,9 @@ impl ConditionData {
                             } else {
                                 if let Some(val) = v.get_value(req, ctx) {
                                     if let Ok(n1) = val.val_to_string().parse::<f64>() {
-                                        if let Ok(n2) = self.get_target_data(req, ctx).parse::<f64>() {
+                                        if let Ok(n2) =
+                                            self.get_target_data(req, ctx).parse::<f64>()
+                                        {
                                             n1 <= n2
                                         } else {
                                             false
@@ -296,8 +311,7 @@ impl ConditionData {
                     } else {
                         false
                     }
-
-                },
+                }
                 // let mut n = false;
                 // if let Ok(r) = variable::get(&self.ref_data) {
                 //     if let Some(ref_v) = r {
@@ -306,8 +320,8 @@ impl ConditionData {
                 //         }
                 //     }
                 // }
-                _ => false
-            }
+                _ => false,
+            },
             ConditionType::CustomJavascript => todo!(),
             ConditionType::CustomRegex => {
                 if let Ok(re) = Regex::new(&self.get_target_data(req, ctx)) {

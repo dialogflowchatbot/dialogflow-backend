@@ -140,7 +140,11 @@ pub async fn clean_expired_session(
                             if now - d[i].create_time > max_sess_dur_sec {
                                 let val = d.remove(i);
                                 if let Err(e) = db::remove(TABLE, val.session_id.as_str()) {
-                                    log::error!("Removing expired session {} failed {:?}", val.session_id, e);
+                                    log::error!(
+                                        "Removing expired session {} failed {:?}",
+                                        val.session_id,
+                                        e
+                                    );
                                 }
                             } else {
                                 i += 1;

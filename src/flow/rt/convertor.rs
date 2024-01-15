@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::vec::Vec;
 
-use super::condition::{ConditionData, TargetDataVariant};
+use super::condition::ConditionData;
 use super::node::{
     CollectNode, ConditionNode, ExternalHttpCallNode, GotoAnotherNode, GotoMainFlowNode,
     RuntimeNnodeEnum, TerminateNode, TextNode,

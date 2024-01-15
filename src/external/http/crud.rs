@@ -4,7 +4,7 @@ use axum::Json;
 
 use super::dto::HttpReqInfo;
 use crate::db;
-use crate::result::{Error, Result};
+use crate::result::Result;
 use crate::web::server::to_res;
 
 pub(crate) const TABLE: redb::TableDefinition<&str, &[u8]> =

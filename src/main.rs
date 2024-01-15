@@ -14,8 +14,11 @@ fn main() {
     // dialogflow::web::t1();
     env::set_var("RUST_LOG", "INFO");
     let mut builder = LoggerBuilder::from_default_env();
-    builder.target(Target::Stdout).format_module_path(false).format_target(false)
-    .format_indent(None);
+    builder
+        .target(Target::Stdout)
+        .format_module_path(false)
+        .format_target(false)
+        .format_indent(None);
     builder.init();
 
     let runtime = Builder::new_multi_thread()

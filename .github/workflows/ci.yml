@@ -1,10 +1,13 @@
 name: Tests and release
 # on: [push, pull_request]
+# https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows
 on:
-  push:
-  pull_request:
-    branches: [main]
-    paths-ignore: ["samples/**", "**.md"]
+  # push:
+  # pull_request:
+  #   branches: [main]
+  #   paths-ignore: ["samples/**", "**.md"]
+  release:
+    types: [published]
 env:
   CRATE_NAME: dialogflow
   GITHUB_TOKEN: ${{ github.token }}
