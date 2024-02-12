@@ -41,7 +41,7 @@ tower-http = { version = "0.5", features = ["cors"] }
 tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "rt", "rt-multi-thread", "signal", "time"] }
 # tracing-subscriber = "0.3"
 log = "0.4.20"
-env_logger = "0.10.1"
+env_logger = "0.11.0"
 lettre = "0.11.4"
 # triple_accel = "0.4.0"
 
