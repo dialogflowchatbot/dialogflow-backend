@@ -18,6 +18,14 @@ pub(crate) struct Settings {
     pub(crate) port: u16,
     #[serde(rename = "maxSessionDurationMin")]
     pub(crate) max_session_duration_min: u16,
+    #[serde(rename = "smtpHost")]
+    smtp_host: String,
+    #[serde(rename = "smtpUsername")]
+    smtp_username: String,
+    #[serde(rename = "smtpPassword")]
+    smtp_password: String,
+    #[serde(rename = "emailVerificationRegex")]
+    email_verification_regex: String,
 }
 
 impl Default for Settings {
@@ -26,6 +34,10 @@ impl Default for Settings {
             ip: String::from("127.0.0.1"),
             port: 12715,
             max_session_duration_min: 30,
+            smtp_host: String::new(),
+            smtp_username: String::new(),
+            smtp_password: String::new(),
+            email_verification_regex: String::new(),
         }
     }
 }

@@ -217,6 +217,7 @@ pub(crate) enum BranchType {
     GotoAnotherNode,
     Condition,
     CollectSuccessful,
+    EmailSentSuccessfully,
 }
 
 #[derive(Deserialize)]
