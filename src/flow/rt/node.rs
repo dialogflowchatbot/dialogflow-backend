@@ -34,6 +34,7 @@ pub(crate) enum RuntimeNnodeEnum {
     CollectNode,
     ExternalHttpCallNode,
     TerminateNode,
+    SendEmailNode,
 }
 
 #[enum_dispatch(RuntimeNnodeEnum)]
@@ -234,6 +235,26 @@ impl RuntimeNode for ExternalHttpCallNode {
             }
         }
         add_next_node(ctx, &self.next_node_id);
+        false
+    }
+}
+
+#[derive(Archive, Deserialize, Serialize)]
+#[archive(compare(PartialEq), check_bytes)]
+pub(crate) struct SendEmailNode {
+    pub(super) to_recipiants: Vec<String>,
+    pub(super) cc_recipients: Vec<String>,
+    pub(super) bcc_recipients: Vec<String>,
+    pub(super) subject: String,
+    pub(super) content: String,
+    pub(super) async_send: bool,
+    pub(super) successful_node_id: Option<String>,
+    pub(super) goto_node_id: String,
+}
+
+impl RuntimeNode for SendEmailNode {
+    fn exec(&self, req: &Request, ctx: &mut Context, response: &mut Response) -> bool {
+        // println!("Into SendEmailNode");
         false
     }
 }

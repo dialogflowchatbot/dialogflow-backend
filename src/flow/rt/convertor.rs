@@ -4,7 +4,7 @@ use std::vec::Vec;
 use super::condition::ConditionData;
 use super::node::{
     CollectNode, ConditionNode, ExternalHttpCallNode, GotoAnotherNode, GotoMainFlowNode,
-    RuntimeNnodeEnum, TerminateNode, TextNode,
+    RuntimeNnodeEnum, SendEmailNode, TerminateNode, TextNode,
 };
 use crate::db;
 use crate::flow::demo;
@@ -72,6 +72,7 @@ fn check_first_node(
                     Node::CollectNode(n) => n.node_id = String::from(first_node_id),
                     Node::GotoNode(n) => n.node_id = String::from(first_node_id),
                     Node::ExternalHttpNode(n) => n.node_id = String::from(first_node_id),
+                    Node::SendEmailNode(n) => n.node_id = String::from(first_node_id),
                 };
             }
         }
@@ -137,12 +138,12 @@ fn convert_subflow(mainflow_id: &str, flow_idx: usize, f: &SubFlowDetail) -> Res
     validate_nodes(f, &nodes)?;
     check_first_node(mainflow_id, flow_idx, f, &mut nodes)?;
     for node in nodes {
-        convert_node(mainflow_id, &node)?;
+        convert_node(mainflow_id, node)?;
     }
     Ok(())
 }
 
-fn convert_node(main_flow_id: &str, node: &Node) -> Result<()> {
+fn convert_node(main_flow_id: &str, node: &mut Node) -> Result<()> {
     let mut nodes: Vec<(String, rkyv::AlignedVec)> = Vec::with_capacity(32);
     match node {
         Node::DialogNode(n) => {
@@ -272,6 +273,35 @@ fn convert_node(main_flow_id: &str, node: &Node) -> Result<()> {
                 http_api_id: n.http_api_id.clone(),
             };
             let r = RuntimeNnodeEnum::ExternalHttpCallNode(node);
+            let bytes = rkyv::to_bytes::<_, 128>(&r).unwrap();
+            // bytes.push(RuntimeNodeTypeId::CollectNode as u8);
+            nodes.push((n.node_id.clone(), bytes));
+        }
+        Node::SendEmailNode(n) => {
+            let (successful_node_id, goto_node_id) = {
+                if n.async_send {
+                    (
+                        Some(std::mem::replace(&mut n.branches[0].target_node_id, String::new())),
+                        std::mem::replace(&mut n.branches[0].target_node_id, String::new()),
+                    )
+                } else {
+                    (
+                        None,
+                        std::mem::replace(&mut n.branches[0].target_node_id, String::new()),
+                    )
+                }
+            };
+            let node = SendEmailNode {
+                to_recipiants: std::mem::replace(&mut n.to_recipients, vec![]),
+                cc_recipients: std::mem::replace(&mut n.cc_recipients, vec![]),
+                bcc_recipients: std::mem::replace(&mut n.bcc_recipients, vec![]),
+                subject: std::mem::replace(&mut n.subject, String::new()),
+                content: std::mem::replace(&mut n.content, String::new()),
+                async_send: n.async_send,
+                successful_node_id: successful_node_id,
+                goto_node_id: goto_node_id,
+            };
+            let r = RuntimeNnodeEnum::SendEmailNode(node);
             let bytes = rkyv::to_bytes::<_, 128>(&r).unwrap();
             // bytes.push(RuntimeNodeTypeId::CollectNode as u8);
             nodes.push((n.node_id.clone(), bytes));

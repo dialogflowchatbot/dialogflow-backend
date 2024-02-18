@@ -58,6 +58,7 @@ pub(crate) enum Node {
     CollectNode(CollectNode),
     GotoNode(GotoNode),
     ExternalHttpNode(ExternalHttpNode),
+    SendEmailNode(SendEmailNode),
 }
 
 impl Node {
@@ -74,6 +75,7 @@ impl Node {
     }
 
     pub(crate) fn is_valid(&self, f: &SubFlowDetail) -> Result<()> {
+        println!("{}", std::any::type_name_of_val(&self));
         match self {
             Node::DialogNode(n) => {
                 let t = "Dialog";
@@ -160,6 +162,28 @@ impl Node {
                     }
                 }
             }
+            Node::SendEmailNode(n) => {
+                let t = "Send email";
+                if !n.valid {
+                    Self::err(f, t, &n.node_name, "verification failed")
+                } else if n.node_name.is_empty() {
+                    Self::err(f, t, &n.node_name, "node name not filled in")
+                } else if n.to_recipients.is_empty() {
+                    Self::err(f, t, &n.node_name, "need to fill in the email recipient")
+                } else if n.subject.is_empty() {
+                    Self::err(f, t, &n.node_name, "need to fill in the email subject")
+                } else if (n.async_send && n.branches.len() != 1)
+                    || (!n.async_send && n.branches.len() != 2)
+                {
+                    Self::err(f, t, &n.node_name, "Branch information is incorrect")
+                } else {
+                    if n.content.is_empty() {
+                        Self::err(f, t, &n.node_name, "need to fill in the email content")
+                    } else {
+                        Ok(())
+                    }
+                }
+            }
         }
     }
 
@@ -170,6 +194,7 @@ impl Node {
             Self::CollectNode(n) => n.node_id.clone(),
             Self::GotoNode(n) => n.node_id.clone(),
             Self::ExternalHttpNode(n) => n.node_id.clone(),
+            Self::SendEmailNode(n) => n.node_id.clone(),
         }
     }
 
@@ -181,6 +206,7 @@ impl Node {
                     .iter()
                     .for_each(|b| ids.push(b.target_node_id.clone()));
             }
+            Self::GotoNode(_) => {}
             Self::ConditionNode(n) => {
                 n.branches
                     .iter()
@@ -196,7 +222,11 @@ impl Node {
                     .iter()
                     .for_each(|b| ids.push(b.target_node_id.clone()));
             }
-            _ => {}
+            Self::SendEmailNode(n) => {
+                n.branches
+                    .iter()
+                    .for_each(|b| ids.push(b.target_node_id.clone()));
+            } // _ => {}
         };
         ids
     }
@@ -204,10 +234,11 @@ impl Node {
     pub(crate) fn get_branches(&mut self) -> Option<&mut Vec<Branch>> {
         match self {
             Self::DialogNode(n) => Some(&mut n.branches),
+            Self::GotoNode(_) => None,
             Self::ConditionNode(n) => Some(&mut n.branches),
             Self::CollectNode(n) => Some(&mut n.branches),
             Self::ExternalHttpNode(n) => Some(&mut n.branches),
-            _ => None,
+            Self::SendEmailNode(n) => Some(&mut n.branches), // _ => None,
         }
     }
 }
@@ -325,4 +356,24 @@ pub(crate) struct ExternalHttpNode {
     #[serde(rename = "httpApiId")]
     pub(crate) http_api_id: String,
     pub(crate) branches: Vec<Branch>,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct SendEmailNode {
+    pub(crate) valid: bool,
+    #[serde(rename = "nodeId")]
+    pub(crate) node_id: String,
+    #[serde(rename = "nodeName")]
+    pub(crate) node_name: String,
+    #[serde(rename = "toRecipients")]
+    pub(crate) to_recipients: Vec<String>,
+    #[serde(rename = "ccRecipients")]
+    pub(crate) cc_recipients: Vec<String>,
+    #[serde(rename = "bccRecipients")]
+    pub(crate) bcc_recipients: Vec<String>,
+    pub(crate) subject: String,
+    pub(crate) content: String,
+    pub(crate) branches: Vec<Branch>,
+    #[serde(rename = "asyncSend")]
+    pub(crate) async_send: bool,
 }
