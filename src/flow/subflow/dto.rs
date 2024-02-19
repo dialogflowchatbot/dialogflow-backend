@@ -247,7 +247,7 @@ impl Node {
 pub(crate) enum BranchType {
     GotoAnotherNode,
     Condition,
-    CollectSuccessful,
+    InfoCollectedSuccessfully,
     EmailSentSuccessfully,
 }
 

@@ -40,9 +40,9 @@ tower-http = { version = "0.5", features = ["cors"] }
 # typetag = "0.2"
 tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "rt", "rt-multi-thread", "signal", "time"] }
 # tracing-subscriber = "0.3"
-log = "0.4.20"
-env_logger = "0.11.0"
-lettre = "0.11.4"
+log = "0.4"
+env_logger = "0.11"
+lettre = "0.11"
 # triple_accel = "0.4.0"
 
 [build-dependencies]

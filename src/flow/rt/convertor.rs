@@ -210,7 +210,7 @@ fn convert_node(main_flow_id: &str, node: &mut Node) -> Result<()> {
             let mut failed_node_id = String::with_capacity(36);
             for b in n.branches.iter() {
                 match b.branch_type {
-                    BranchType::CollectSuccessful => {
+                    BranchType::InfoCollectedSuccessfully => {
                         successful_node_id.push_str(b.target_node_id.as_str())
                     }
                     BranchType::GotoAnotherNode => {
