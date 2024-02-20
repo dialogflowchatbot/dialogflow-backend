@@ -19,13 +19,13 @@ pub(crate) struct Settings {
     #[serde(rename = "maxSessionDurationMin")]
     pub(crate) max_session_duration_min: u16,
     #[serde(rename = "smtpHost")]
-    smtp_host: String,
+    pub(crate) smtp_host: String,
     #[serde(rename = "smtpUsername")]
-    smtp_username: String,
+    pub(crate) smtp_username: String,
     #[serde(rename = "smtpPassword")]
-    smtp_password: String,
+    pub(crate) smtp_password: String,
     #[serde(rename = "emailVerificationRegex")]
-    email_verification_regex: String,
+    pub(crate) email_verification_regex: String,
 }
 
 impl Default for Settings {

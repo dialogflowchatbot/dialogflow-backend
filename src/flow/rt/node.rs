@@ -255,6 +255,43 @@ pub(crate) struct SendEmailNode {
 impl RuntimeNode for SendEmailNode {
     fn exec(&self, req: &Request, ctx: &mut Context, response: &mut Response) -> bool {
         // println!("Into SendEmailNode");
+        use crate::man::settings::get_settings;
+        let mut successful = if self.async_send { true } else { false };
+        if let Ok(op) = get_settings() {
+            if let Some(settings) = op {
+                if !settings.smtp_host.is_empty() {
+                    use lettre::message::header::ContentType;
+                    use lettre::transport::smtp::authentication::Credentials;
+                    use lettre::{
+                        message::{header, Mailboxes, MessageBuilder, SinglePart},
+                        Message, SmtpTransport,
+                    };
+                    let mailboxes: Mailboxes = self.to_recipiants.join(",").parse().unwrap();
+                    let to_header: header::To = mailboxes.into();
+
+                    let email = MessageBuilder::new()
+                        .mailbox(to_header)
+                        .from("username@gmail.com".parse().unwrap())
+                        .subject(&self.subject)
+                        .body(self.content.clone())
+                        // .singlepart(SinglePart::html(&self.content))
+                        .unwrap();
+                    let creds = Credentials::new(
+                        settings.smtp_username.to_owned(),
+                        settings.smtp_password.to_owned(),
+                    );
+                    let mailer = SmtpTransport::relay(&settings.smtp_host)
+                        .unwrap()
+                        .credentials(creds)
+                        .build();
+
+                    match mailer.send(&email) {
+                        Ok(_) => println!("Email sent successfully!"),
+                        Err(e) => panic!("Could not send email: {:?}", e),
+                    }
+                }
+            }
+        }
         false
     }
 }

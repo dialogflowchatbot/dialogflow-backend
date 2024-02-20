@@ -281,7 +281,10 @@ fn convert_node(main_flow_id: &str, node: &mut Node) -> Result<()> {
             let (successful_node_id, goto_node_id) = {
                 if n.async_send {
                     (
-                        Some(std::mem::replace(&mut n.branches[0].target_node_id, String::new())),
+                        Some(std::mem::replace(
+                            &mut n.branches[0].target_node_id,
+                            String::new(),
+                        )),
                         std::mem::replace(&mut n.branches[0].target_node_id, String::new()),
                     )
                 } else {
