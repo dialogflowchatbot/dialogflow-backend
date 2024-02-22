@@ -24,6 +24,10 @@ pub(crate) struct Settings {
     pub(crate) smtp_username: String,
     #[serde(rename = "smtpPassword")]
     pub(crate) smtp_password: String,
+    #[serde(rename = "smtpTimeoutSec")]
+    pub(crate) smtp_timeout_sec: u16,
+    #[serde(rename = "emailSender")]
+    pub(crate) email_sender: String,
     #[serde(rename = "emailVerificationRegex")]
     pub(crate) email_verification_regex: String,
 }
@@ -37,6 +41,8 @@ impl Default for Settings {
             smtp_host: String::new(),
             smtp_username: String::new(),
             smtp_password: String::new(),
+            smtp_timeout_sec: 60u16,
+            email_sender: String::new(),
             email_verification_regex: String::new(),
         }
     }

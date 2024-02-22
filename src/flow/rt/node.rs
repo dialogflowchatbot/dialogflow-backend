@@ -242,7 +242,7 @@ impl RuntimeNode for ExternalHttpCallNode {
 #[derive(Archive, Deserialize, Serialize)]
 #[archive(compare(PartialEq), check_bytes)]
 pub(crate) struct SendEmailNode {
-    pub(super) to_recipiants: Vec<String>,
+    pub(super) to_recipients: Vec<String>,
     pub(super) cc_recipients: Vec<String>,
     pub(super) bcc_recipients: Vec<String>,
     pub(super) subject: String,
@@ -253,6 +253,76 @@ pub(crate) struct SendEmailNode {
     pub(super) goto_node_id: String,
 }
 
+impl SendEmailNode {
+    fn send_email(&self, settings: &crate::man::settings::Settings) -> Result<()> {
+        use lettre::transport::smtp::authentication::Credentials;
+        use lettre::{
+            message::{
+                header::{self, Bcc, Cc, ContentType, To},
+                Mailboxes, MessageBuilder, SinglePart,
+            },
+            AsyncSmtpTransport, AsyncTransport, Message, SmtpTransport, Tokio1Executor, Transport,
+        };
+        let mailboxes: Mailboxes = self.to_recipients.join(",").parse()?;
+        let to_header: To = mailboxes.into();
+        let mut builder = MessageBuilder::new().mailbox(to_header);
+        if !self.cc_recipients.is_empty() {
+            let mailboxes: Mailboxes = self.cc_recipients.join(",").parse()?;
+            let cc_header: Cc = mailboxes.into();
+            builder = builder.mailbox(cc_header);
+        }
+        if !self.bcc_recipients.is_empty() {
+            let mailboxes: Mailboxes = self.bcc_recipients.join(",").parse()?;
+            let bcc_header: Bcc = mailboxes.into();
+            builder = builder.mailbox(bcc_header);
+        }
+
+        let content_type: ContentType = if self.content_type.eq("HTML") {
+            ContentType::TEXT_HTML
+        } else {
+            ContentType::TEXT_PLAIN
+        };
+
+        let email = builder
+            .from(settings.email_sender.parse()?)
+            .subject(&self.subject)
+            .header(content_type)
+            .body(self.content.clone())
+            // .singlepart(SinglePart::html(&self.content))
+            ?;
+        let creds = Credentials::new(
+            settings.smtp_username.to_owned(),
+            settings.smtp_password.to_owned(),
+        );
+        if self.async_send {
+            let builder = AsyncSmtpTransport::<Tokio1Executor>::relay(&settings.smtp_host)?;
+            let mailer = builder
+                .credentials(creds)
+                .timeout(Some(core::time::Duration::from_secs(
+                    settings.smtp_timeout_sec as u64,
+                )))
+                .build();
+            tokio::spawn(async move {
+                // mailer.send(email) // will be wrong
+                let _ = mailer.send(email).await;
+            });
+            Ok(())
+        } else {
+            let mailer = SmtpTransport::relay(&settings.smtp_host)?
+                .credentials(creds)
+                .timeout(Some(core::time::Duration::from_secs(
+                    settings.smtp_timeout_sec as u64,
+                )))
+                .build();
+
+            Ok(mailer.send(&email).map(|r| {
+                log::info!("Sent email response: {:?}", r);
+                ()
+            })?)
+        }
+    }
+}
+
 impl RuntimeNode for SendEmailNode {
     fn exec(&self, _req: &Request, ctx: &mut Context, _response: &mut Response) -> bool {
         // println!("Into SendEmailNode");
@@ -260,59 +330,9 @@ impl RuntimeNode for SendEmailNode {
         if let Ok(op) = get_settings() {
             if let Some(settings) = op {
                 if !settings.smtp_host.is_empty() {
-                    use lettre::message::header::ContentType;
-                    use lettre::transport::smtp::authentication::Credentials;
-                    use lettre::{
-                        message::{header, Mailboxes, MessageBuilder, SinglePart},
-                        AsyncSmtpTransport, AsyncTransport, Message, SmtpTransport, Tokio1Executor,
-                        Transport,
-                    };
-                    let mailboxes: Mailboxes = self.to_recipiants.join(",").parse().unwrap();
-                    let to_header: header::To = mailboxes.into();
-
-                    let content_type: ContentType = if self.content_type.eq("HTML") {
-                        ContentType::TEXT_HTML
-                    } else {
-                        ContentType::TEXT_PLAIN
-                    };
-
-                    let email = MessageBuilder::new()
-                        .mailbox(to_header)
-                        .from("username@gmail.com".parse().unwrap())
-                        .subject(&self.subject)
-                        .header(content_type)
-                        .body(self.content.clone())
-                        // .singlepart(SinglePart::html(&self.content))
-                        .unwrap();
-                    let creds = Credentials::new(
-                        settings.smtp_username.to_owned(),
-                        settings.smtp_password.to_owned(),
-                    );
-                    if self.async_send {
-                        tokio::spawn(async move {
-                            let mailer =
-                                AsyncSmtpTransport::<Tokio1Executor>::relay(&settings.smtp_host)
-                                    .unwrap()
-                                    .credentials(creds)
-                                    // .timeout(core::time::Duration())
-                                    .build();
-                            // mailer.send(email) // will be wrong
-                            let _ = mailer.send(email).await;
-                        });
-                        add_next_node(ctx, &self.goto_node_id);
-                    } else {
-                        let mailer = SmtpTransport::relay(&settings.smtp_host)
-                            .unwrap()
-                            .credentials(creds)
-                            .build();
-
-                        match mailer.send(&email) {
-                            Ok(_) => add_next_node(ctx, self.successful_node_id.as_ref().unwrap()),
-                            Err(e) => {
-                                log::error!("Could not send email: {:?}", e);
-                                add_next_node(ctx, &self.goto_node_id);
-                            }
-                        }
+                    match self.send_email(&settings) {
+                        Ok(_) => add_next_node(ctx, self.successful_node_id.as_ref().unwrap()),
+                        Err(_) => add_next_node(ctx, &self.goto_node_id),
                     }
                 }
             }
