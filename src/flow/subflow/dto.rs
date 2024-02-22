@@ -373,6 +373,8 @@ pub(crate) struct SendEmailNode {
     pub(crate) bcc_recipients: Vec<String>,
     pub(crate) subject: String,
     pub(crate) content: String,
+    #[serde(rename = "contentType")]
+    pub(crate) content_type: String,
     pub(crate) branches: Vec<Branch>,
     #[serde(rename = "asyncSend")]
     pub(crate) async_send: bool,

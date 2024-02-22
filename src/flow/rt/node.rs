@@ -247,6 +247,7 @@ pub(crate) struct SendEmailNode {
     pub(super) bcc_recipients: Vec<String>,
     pub(super) subject: String,
     pub(super) content: String,
+    pub(super) content_type: String,
     pub(super) async_send: bool,
     pub(super) successful_node_id: Option<String>,
     pub(super) goto_node_id: String,
@@ -264,15 +265,22 @@ impl RuntimeNode for SendEmailNode {
                     use lettre::transport::smtp::authentication::Credentials;
                     use lettre::{
                         message::{header, Mailboxes, MessageBuilder, SinglePart},
-                        Message, SmtpTransport,
+                        Message, SmtpTransport, Transport,
                     };
                     let mailboxes: Mailboxes = self.to_recipiants.join(",").parse().unwrap();
                     let to_header: header::To = mailboxes.into();
+
+                    let content_type: ContentType = if self.content_type.eq("HTML") {
+                        ContentType::TEXT_HTML
+                    } else {
+                        ContentType::TEXT_PLAIN
+                    };
 
                     let email = MessageBuilder::new()
                         .mailbox(to_header)
                         .from("username@gmail.com".parse().unwrap())
                         .subject(&self.subject)
+                        .header(content_type)
                         .body(self.content.clone())
                         // .singlepart(SinglePart::html(&self.content))
                         .unwrap();

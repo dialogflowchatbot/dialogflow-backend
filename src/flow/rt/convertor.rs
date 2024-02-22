@@ -300,6 +300,7 @@ fn convert_node(main_flow_id: &str, node: &mut Node) -> Result<()> {
                 bcc_recipients: std::mem::replace(&mut n.bcc_recipients, vec![]),
                 subject: std::mem::replace(&mut n.subject, String::new()),
                 content: std::mem::replace(&mut n.content, String::new()),
+                content_type: std::mem::replace(&mut n.content_type, String::new()),
                 async_send: n.async_send,
                 successful_node_id: successful_node_id,
                 goto_node_id: goto_node_id,
