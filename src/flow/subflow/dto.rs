@@ -365,6 +365,8 @@ pub(crate) struct SendEmailNode {
     pub(crate) node_id: String,
     #[serde(rename = "nodeName")]
     pub(crate) node_name: String,
+    #[serde(rename = "from")]
+    pub(crate) from: String,
     #[serde(rename = "toRecipients")]
     pub(crate) to_recipients: Vec<String>,
     #[serde(rename = "ccRecipients")]

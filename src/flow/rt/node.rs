@@ -242,6 +242,7 @@ impl RuntimeNode for ExternalHttpCallNode {
 #[derive(Archive, Deserialize, Serialize)]
 #[archive(compare(PartialEq), check_bytes)]
 pub(crate) struct SendEmailNode {
+    pub(super) from: String,
     pub(super) to_recipients: Vec<String>,
     pub(super) cc_recipients: Vec<String>,
     pub(super) bcc_recipients: Vec<String>,
@@ -284,7 +285,7 @@ impl SendEmailNode {
         };
 
         let email = builder
-            .from(settings.email_sender.parse()?)
+            .from(self.from.parse()?)
             .subject(&self.subject)
             .header(content_type)
             .body(self.content.clone())

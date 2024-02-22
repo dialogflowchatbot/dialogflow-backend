@@ -295,6 +295,7 @@ fn convert_node(main_flow_id: &str, node: &mut Node) -> Result<()> {
                 }
             };
             let node = SendEmailNode {
+                from: std::mem::replace(&mut n.from, String::new()),
                 to_recipients: std::mem::replace(&mut n.to_recipients, vec![]),
                 cc_recipients: std::mem::replace(&mut n.cc_recipients, vec![]),
                 bcc_recipients: std::mem::replace(&mut n.bcc_recipients, vec![]),
