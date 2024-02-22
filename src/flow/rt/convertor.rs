@@ -278,20 +278,16 @@ fn convert_node(main_flow_id: &str, node: &mut Node) -> Result<()> {
             nodes.push((n.node_id.clone(), bytes));
         }
         Node::SendEmailNode(n) => {
-            let (successful_node_id, goto_node_id) = {
+            let successful_node_id =
+                std::mem::replace(&mut n.branches[0].target_node_id, String::new());
+            let goto_node_id = {
                 if n.async_send {
-                    (
-                        Some(std::mem::replace(
-                            &mut n.branches[0].target_node_id,
-                            String::new(),
-                        )),
-                        std::mem::replace(&mut n.branches[0].target_node_id, String::new()),
-                    )
+                    None
                 } else {
-                    (
-                        None,
-                        std::mem::replace(&mut n.branches[0].target_node_id, String::new()),
-                    )
+                    Some(std::mem::replace(
+                        &mut n.branches[1].target_node_id,
+                        String::new(),
+                    ))
                 }
             };
             let node = SendEmailNode {

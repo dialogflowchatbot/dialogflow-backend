@@ -250,8 +250,8 @@ pub(crate) struct SendEmailNode {
     pub(super) content: String,
     pub(super) content_type: String,
     pub(super) async_send: bool,
-    pub(super) successful_node_id: Option<String>,
-    pub(super) goto_node_id: String,
+    pub(super) successful_node_id: String,
+    pub(super) goto_node_id: Option<String>,
 }
 
 impl SendEmailNode {
@@ -332,8 +332,8 @@ impl RuntimeNode for SendEmailNode {
             if let Some(settings) = op {
                 if !settings.smtp_host.is_empty() {
                     match self.send_email(&settings) {
-                        Ok(_) => add_next_node(ctx, self.successful_node_id.as_ref().unwrap()),
-                        Err(_) => add_next_node(ctx, &self.goto_node_id),
+                        Ok(_) => add_next_node(ctx, &self.successful_node_id),
+                        Err(_) => add_next_node(ctx, self.goto_node_id.as_ref().unwrap()),
                     }
                 }
             }
