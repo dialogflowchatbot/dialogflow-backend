@@ -254,10 +254,9 @@ pub(crate) struct SendEmailNode {
 }
 
 impl RuntimeNode for SendEmailNode {
-    fn exec(&self, req: &Request, ctx: &mut Context, response: &mut Response) -> bool {
+    fn exec(&self, _req: &Request, ctx: &mut Context, _response: &mut Response) -> bool {
         // println!("Into SendEmailNode");
         use crate::man::settings::get_settings;
-        let mut successful = if self.async_send { true } else { false };
         if let Ok(op) = get_settings() {
             if let Some(settings) = op {
                 if !settings.smtp_host.is_empty() {
@@ -265,7 +264,8 @@ impl RuntimeNode for SendEmailNode {
                     use lettre::transport::smtp::authentication::Credentials;
                     use lettre::{
                         message::{header, Mailboxes, MessageBuilder, SinglePart},
-                        Message, SmtpTransport, Transport,
+                        AsyncSmtpTransport, AsyncTransport, Message, SmtpTransport, Tokio1Executor,
+                        Transport,
                     };
                     let mailboxes: Mailboxes = self.to_recipiants.join(",").parse().unwrap();
                     let to_header: header::To = mailboxes.into();
@@ -288,14 +288,31 @@ impl RuntimeNode for SendEmailNode {
                         settings.smtp_username.to_owned(),
                         settings.smtp_password.to_owned(),
                     );
-                    let mailer = SmtpTransport::relay(&settings.smtp_host)
-                        .unwrap()
-                        .credentials(creds)
-                        .build();
+                    if self.async_send {
+                        tokio::spawn(async move {
+                            let mailer =
+                                AsyncSmtpTransport::<Tokio1Executor>::relay(&settings.smtp_host)
+                                    .unwrap()
+                                    .credentials(creds)
+                                    // .timeout(core::time::Duration())
+                                    .build();
+                            // mailer.send(email) // will be wrong
+                            let _ = mailer.send(email).await;
+                        });
+                        add_next_node(ctx, &self.goto_node_id);
+                    } else {
+                        let mailer = SmtpTransport::relay(&settings.smtp_host)
+                            .unwrap()
+                            .credentials(creds)
+                            .build();
 
-                    match mailer.send(&email) {
-                        Ok(_) => println!("Email sent successfully!"),
-                        Err(e) => panic!("Could not send email: {:?}", e),
+                        match mailer.send(&email) {
+                            Ok(_) => add_next_node(ctx, self.successful_node_id.as_ref().unwrap()),
+                            Err(e) => {
+                                log::error!("Could not send email: {:?}", e);
+                                add_next_node(ctx, &self.goto_node_id);
+                            }
+                        }
                     }
                 }
             }
