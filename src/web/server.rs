@@ -214,7 +214,7 @@ async fn version() -> impl IntoResponse {
 
 async fn check_new_version() -> impl IntoResponse {
     let r = reqwest::get(
-        "https://raw.githubusercontent.com/dialogflowchatbot/dialogflow/main/version.json",
+        "https://dialogflowchatbot.github.io/check-new-version.json",
     )
     .await;
     if let Err(e) = r {
