@@ -8,7 +8,7 @@ use axum::Router;
 use colored::Colorize;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
-use tower_http::cors::CorsLayer;
+use tower_http::cors::{AllowOrigin, CorsLayer};
 
 use super::asset::ASSETS_MAP;
 use crate::external::http::crud as http;
@@ -162,7 +162,13 @@ fn gen_router() -> Router {
         // .route("/o", get(flow::output))
         .layer(
             CorsLayer::new()
-                .allow_origin("http://localhost:5173".parse::<HeaderValue>().unwrap())
+                .allow_origin(AllowOrigin::predicate(
+                    |_origin: &HeaderValue, _request_parts| {
+                        // println!("{}", String::from_utf8_lossy(origin.as_bytes()));
+                        // origin.as_bytes().ends_with(b"localhost")
+                        true
+                    },
+                ))
                 .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE])
                 .allow_methods([Method::GET, Method::POST, Method::DELETE, Method::PUT]),
         )
@@ -213,10 +219,7 @@ async fn version() -> impl IntoResponse {
 }
 
 async fn check_new_version() -> impl IntoResponse {
-    let r = reqwest::get(
-        "https://dialogflowchatbot.github.io/check-new-version.json",
-    )
-    .await;
+    let r = reqwest::get("https://dialogflowchatbot.github.io/check-new-version.json").await;
     if let Err(e) = r {
         return to_res(Err(Error::NetworkConnectTimeout(e)));
     }

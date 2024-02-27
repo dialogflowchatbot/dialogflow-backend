@@ -1,8 +1,6 @@
 [
-(include_bytes!(r#"..\resources\assets/assets\canvas-ebZo_yLf.js.gz"#), "text/javascript"),
-(include_bytes!(r#"..\resources\assets/assets\index-MTyOoNFh.js.gz"#), "text/javascript"),
-(include_bytes!(r#"..\resources\assets/assets\index-naI8Vgvx.css.gz"#), "text/css"),
-(include_bytes!(r#"..\resources\assets/assets\__commonjsHelpers__-w40geAFS.js.gz"#), "text/javascript"),
+(include_bytes!(r#"..\resources\assets/assets\index-3syoVsug.js.gz"#), "text/javascript"),
+(include_bytes!(r#"..\resources\assets/assets\index-iCGkRJ-1.css.gz"#), "text/css"),
 (include_bytes!(r#"..\resources\assets/favicon.ico.gz"#), "image/x-icon"),
 (include_bytes!(r#"..\resources\assets/index.html.gz"#), "text/html; charset=utf-8"),
 ]

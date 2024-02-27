@@ -75,7 +75,7 @@ impl Node {
     }
 
     pub(crate) fn is_valid(&self, f: &SubFlowDetail) -> Result<()> {
-        println!("{}", std::any::type_name_of_val(&self));
+        // println!("{}", std::any::type_name_of_val(&self));
         match self {
             Node::DialogNode(n) => {
                 let t = "Dialog";

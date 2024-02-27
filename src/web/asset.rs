@@ -4,11 +4,9 @@ use once_cell::sync::Lazy;
 
 pub(crate) static ASSETS_MAP: Lazy<HashMap<&str, usize>> = Lazy::new(|| {
 HashMap::from([
-("/assets/canvas-ebZo_yLf.js", 0),
-("/assets/index-MTyOoNFh.js", 1),
-("/assets/index-naI8Vgvx.css", 2),
-("/assets/__commonjsHelpers__-w40geAFS.js", 3),
-("/favicon.ico", 4),
-("/", 5),
-("/index.html", 5),
+("/assets/index-3syoVsug.js", 0),
+("/assets/index-iCGkRJ-1.css", 1),
+("/favicon.ico", 2),
+("/", 3),
+("/index.html", 3),
 ])});
