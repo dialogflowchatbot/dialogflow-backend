@@ -49,7 +49,7 @@ lettre = { version = "0.11", features = ["tokio1", "smtp-transport", "tokio1-nat
 flate2 = "1.0"
 
 [target.'cfg(windows)'.dependencies]
-windows = {version = "0.52", features = ["Win32_Globalization","Win32_System_SystemServices"]}
+windows = {version = "0.53", features = ["Win32_Globalization","Win32_System_SystemServices"]}
 
 # https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html#platform-specific-dependencies
 # https://doc.rust-lang.org/reference/conditional-compilation.html
