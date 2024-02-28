@@ -3,7 +3,7 @@ use rkyv::{Archive, Deserialize, Serialize};
 
 use super::condition::ConditionData;
 use super::context::Context;
-use super::dto::{CollectData, Request, Response};
+use super::dto::{AnswerData, AnswerType, CollectData, Request, Response};
 use crate::external::http::client as http;
 use crate::flow::rt::collector;
 use crate::flow::subflow::dto::NextActionType;
@@ -93,7 +93,10 @@ impl RuntimeNode for TextNode {
         // println!("Into TextNode");
         // let now = std::time::Instant::now();
         match replace_vars(&self.text, &req, ctx) {
-            Ok(answer) => response.answers.push(answer),
+            Ok(answer) => response.answers.push(AnswerData {
+                text: answer,
+                answer_type: AnswerType::TextPlain,
+            }),
             Err(e) => log::error!("{:?}", e),
         };
         add_next_node(ctx, &self.next_node_id);

@@ -96,9 +96,33 @@ pub async fn start_app() {
 
     let r: Router = gen_router();
     let app = r.fallback(fallback);
-    let addr = format!("{}:{}", settings.ip, settings.port);
     // let socket_addr: SocketAddr = addr.parse().expect(&invalid_ip_msg(&addr));
-    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+    let mut bind_res;
+    let mut port = settings.port;
+    loop {
+        let addr = format!("{}:{}", settings.ip, port);
+        bind_res = tokio::net::TcpListener::bind(&addr).await;
+        if bind_res.is_ok() {
+            break;
+        }
+        if !settings.select_random_port_when_conflict {
+            log::error!("The listening port is occupied and the program fails to start.");
+            log::info!("Tip: You can check the random port in the settings to avoid this problem.");
+            std::process::exit(-1);
+        }
+        port = port + 1;
+        if port == settings.port {
+            log::error!("The listening port is occupied and the program fails to start.");
+            log::info!("Tip: You can check the random port in the settings to avoid this problem.");
+            std::process::exit(-1);
+        }
+        if port == 65535 {
+            port = 1025;
+        }
+    }
+    let listener = bind_res.unwrap();
+    // let addr = format!("{}:{}", settings.ip, settings.port);
+    // let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     // let addr = SocketAddr::from((settings.ip, settings.port));
     axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal(sender))

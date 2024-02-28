@@ -33,8 +33,21 @@ pub(crate) struct CollectData {
 }
 
 #[derive(Serialize)]
+pub(crate) enum AnswerType {
+    TextPlain,
+    TextHtml,
+}
+
+#[derive(Serialize)]
+pub(crate) struct AnswerData {
+    pub(crate) text: String,
+    #[serde(rename = "answerType")]
+    pub(crate) answer_type: AnswerType,
+}
+
+#[derive(Serialize)]
 pub(crate) struct Response {
-    pub(crate) answers: Vec<String>,
+    pub(crate) answers: Vec<AnswerData>,
     #[serde(rename = "collectData")]
     pub(crate) collect_data: Vec<CollectData>,
     #[serde(rename = "nextAction")]

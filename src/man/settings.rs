@@ -28,6 +28,8 @@ pub(crate) struct Settings {
     pub(crate) smtp_timeout_sec: u16,
     #[serde(rename = "emailVerificationRegex")]
     pub(crate) email_verification_regex: String,
+    #[serde(rename = "selectRandomPortWhenConflict")]
+    pub(crate) select_random_port_when_conflict: bool,
 }
 
 impl Default for Settings {
@@ -41,6 +43,7 @@ impl Default for Settings {
             smtp_password: String::new(),
             smtp_timeout_sec: 60u16,
             email_verification_regex: String::new(),
+            select_random_port_when_conflict: false,
         }
     }
 }
