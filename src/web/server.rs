@@ -66,28 +66,6 @@ pub async fn start_app() {
         s
     };
 
-    #[cfg(target_os = "windows")]
-    let _ = colored::control::set_virtual_terminal(true).unwrap();
-
-    log::info!(
-        "  -->  {} {}{}:{}",
-        if *IS_EN {
-            "Please open a browser and visit"
-        } else {
-            "请用浏览器访问"
-        },
-        "http://".bright_green(),
-        settings.ip.bright_green(),
-        settings.port.to_string().blue()
-    );
-    log::info!("Current version: {}", VERSION);
-    log::info!("Visiting https://dialogflowchatbot.github.io/ for the latest releases");
-
-    log::info!(
-        "  -->  Press {} to terminate this application",
-        "Ctrl+C".bright_red()
-    );
-
     let (sender, recv) = tokio::sync::oneshot::channel::<()>();
     tokio::spawn(crate::flow::rt::context::clean_expired_session(
         recv,
@@ -121,6 +99,29 @@ pub async fn start_app() {
         }
     }
     let listener = bind_res.unwrap();
+    
+    #[cfg(target_os = "windows")]
+    let _ = colored::control::set_virtual_terminal(true).unwrap();
+
+    log::info!(
+        "  -->  {} {}{}:{}",
+        if *IS_EN {
+            "Please open a browser and visit"
+        } else {
+            "请用浏览器访问"
+        },
+        "http://".bright_green(),
+        settings.ip.bright_green(),
+        port.to_string().blue()
+    );
+    log::info!("Current version: {}", VERSION);
+    log::info!("Visiting https://dialogflowchatbot.github.io/ for the latest releases");
+
+    log::info!(
+        "  -->  Press {} to terminate this application",
+        "Ctrl+C".bright_red()
+    );
+
     // let addr = format!("{}:{}", settings.ip, settings.port);
     // let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     // let addr = SocketAddr::from((settings.ip, settings.port));
