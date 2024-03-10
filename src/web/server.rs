@@ -66,6 +66,22 @@ pub async fn start_app() {
         s
     };
 
+    let mut listening_ip = String::with_capacity(32);
+    let mut set_listening_ip = false;
+    for argument in std::env::args() {
+        if set_listening_ip {
+            listening_ip.push_str(&argument);
+            break;
+        }
+        if argument.eq("-ip") {
+            set_listening_ip = true;
+            continue;
+        }
+    }
+    if listening_ip.is_empty() {
+        listening_ip.push_str(&settings.ip);
+    }
+
     let (sender, recv) = tokio::sync::oneshot::channel::<()>();
     tokio::spawn(crate::flow::rt::context::clean_expired_session(
         recv,
@@ -78,7 +94,7 @@ pub async fn start_app() {
     let mut bind_res;
     let mut port = settings.port;
     loop {
-        let addr = format!("{}:{}", settings.ip, port);
+        let addr = format!("{}:{}", &listening_ip, port);
         bind_res = tokio::net::TcpListener::bind(&addr).await;
         if bind_res.is_ok() {
             break;
@@ -111,7 +127,7 @@ pub async fn start_app() {
             "请用浏览器访问"
         },
         "http://".bright_green(),
-        settings.ip.bright_green(),
+        listening_ip.bright_green(),
         port.to_string().blue()
     );
     log::info!("Current version: {}", VERSION);
