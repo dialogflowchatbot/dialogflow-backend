@@ -10,11 +10,11 @@ use crate::web::server;
 pub(crate) fn get_demo<'a>(name: &'a str) -> Option<&'static str> {
     let is_en = *server::IS_EN;
     if name.eq("demo-collect") {
-        Some(if is_en { DEMO_COLLECT } else { DEMO_COLLECT_EN })
+        Some(if is_en { DEMO_COLLECT_EN } else { DEMO_COLLECT })
     } else if name.eq("demo-notify") {
-        Some(if is_en { DEMO_NOTIFY } else { DEMO_NOTIFY_EN })
+        Some(if is_en { DEMO_NOTIFY_EN } else { DEMO_NOTIFY })
     } else if name.eq("demo-repay") {
-        Some(if is_en { DEMO_REPAY } else { DEMO_REPAY_EN })
+        Some(if is_en { DEMO_REPAY_EN } else { DEMO_REPAY })
     } else {
         None
     }
