@@ -45,7 +45,7 @@ fn get_lang() -> String {
 
 #[cfg(not(windows))]
 fn get_lang() -> String {
-    std::env::var("LANG").unwrap_or(String::from("zh_CN"))
+    std::env::var("LANG").unwrap_or(String::from("en_US"))
 }
 
 // fn invalid_ip_msg(addr: &String) -> String {
