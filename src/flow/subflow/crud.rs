@@ -1,5 +1,5 @@
-use axum::extract::Query;
-use axum::http::StatusCode;
+use axum::extract::{Query, Request};
+use axum::http::{header::HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use once_cell::sync::Lazy;
@@ -25,8 +25,11 @@ static LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 //     db::write(TABLE, mainflow_id, &flow)
 // }
 
-pub(crate) async fn list(Query(q): Query<SubFlowFormData>) -> Response {
-    let template = demo::get_demo(&q.main_flow_id);
+pub(crate) async fn list(headers: HeaderMap, Query(q): Query<SubFlowFormData>) -> Response {
+    let client_language = headers
+        .get("Accept-Language")
+        .map_or_else(|| "", |v| v.to_str().unwrap_or(""));
+    let template = demo::get_demo(client_language, &q.main_flow_id);
     if template.is_some() {
         return (StatusCode::OK, template.unwrap()).into_response();
     }
@@ -125,9 +128,15 @@ pub(crate) async fn delete(Query(form): Query<SubFlowFormData>) -> impl IntoResp
     to_res(r)
 }
 
-pub(crate) async fn release(Query(data): Query<SubFlowFormData>) -> impl IntoResponse {
+pub(crate) async fn release(
+    headers: HeaderMap,
+    Query(data): Query<SubFlowFormData>,
+) -> impl IntoResponse {
     // let now = std::time::Instant::now();
-    let r = crate::flow::rt::convertor::convert_flow(&data.main_flow_id);
+    let client_language = headers
+        .get("Accept-Language")
+        .map_or_else(|| "", |v| v.to_str().unwrap_or(""));
+    let r = crate::flow::rt::convertor::convert_flow(client_language, &data.main_flow_id);
     // println!("release used time:{:?}", now.elapsed());
     to_res(r)
 }

@@ -96,7 +96,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         writeln!(
             &mut service_asset_file,
             r##"(include_bytes!(r#"{file_path}"#), "{mime}"),"##,
-            file_path = format!("{}", f.display()).replace("\\", std::path::MAIN_SEPARATOR_STR).replace("src", ".."),
+            file_path = format!("{}", f.display())
+                .replace("\\", std::path::MAIN_SEPARATOR_STR)
+                .replace("src", ".."),
             mime = get_content_type(format!("{}", f.display())),
         )?;
     }

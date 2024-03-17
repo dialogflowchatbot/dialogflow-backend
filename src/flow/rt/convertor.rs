@@ -12,13 +12,13 @@ use crate::flow::subflow::crud::TABLE;
 use crate::flow::subflow::dto::{BranchType, CanvasCells, NextActionType, Node, SubFlowDetail};
 use crate::result::{Error, Result};
 
-pub(crate) fn convert_flow(mainflow_id: &str) -> Result<()> {
-    let flows: Vec<SubFlowDetail> = if let Some(t) = demo::get_demo(mainflow_id) {
+pub(crate) fn convert_flow(client_language: &str, mainflow_id: &str) -> Result<()> {
+    let flows: Vec<SubFlowDetail> = if let Some(t) = demo::get_demo(client_language, mainflow_id) {
         serde_json::from_str(t)?
     } else {
         let r: Option<Vec<SubFlowDetail>> = db::query(TABLE, mainflow_id)?;
         if r.is_none() {
-            return Err(Error::ErrorWithMessage(String::from("未找到流程数据")));
+            return Err(Error::ErrorWithMessage(String::from("Flow data not found")));
         }
         r.unwrap()
     };

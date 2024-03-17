@@ -89,3 +89,25 @@ pub(crate) fn save_settings(data: &Settings) -> Result<()> {
     })?;
     db::write(TABLE, SETTINGS_KEY, &data)
 }
+
+pub(crate) async fn smtp_test(Json(settings): Json<Settings>) -> impl IntoResponse {
+    to_res(check_smtp_settings(&settings))
+}
+
+pub(crate) fn check_smtp_settings(settings: &Settings) -> Result<bool> {
+    use lettre::transport::smtp::authentication::Credentials;
+    use lettre::SmtpTransport;
+    let creds = Credentials::new(
+        settings.smtp_username.to_owned(),
+        settings.smtp_password.to_owned(),
+    );
+
+    let mailer = SmtpTransport::relay(&settings.smtp_host)?
+        .credentials(creds)
+        .timeout(Some(core::time::Duration::from_secs(
+            settings.smtp_timeout_sec as u64,
+        )))
+        .build();
+
+    Ok(mailer.test_connection()?)
+}

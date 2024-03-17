@@ -115,7 +115,7 @@ pub async fn start_app() {
         }
     }
     let listener = bind_res.unwrap();
-    
+
     #[cfg(target_os = "windows")]
     let _ = colored::control::set_virtual_terminal(true).unwrap();
 
@@ -197,6 +197,7 @@ fn gen_router() -> Router {
             "/management/settings",
             get(settings::get).post(settings::save),
         )
+        .route("/management/settings/smtp/test", post(settings::smtp_test))
         .route("/flow/answer", post(rt::answer))
         .route("/version.json", get(version))
         .route("/check-new-version.json", get(check_new_version))
