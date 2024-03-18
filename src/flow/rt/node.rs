@@ -308,7 +308,9 @@ impl SendEmailNode {
                 .build();
             tokio::spawn(async move {
                 // mailer.send(email) // will be wrong
-                let _ = mailer.send(email).await;
+                if let Err(e) = mailer.send(email).await {
+                    log::error!("Failed to send email, failure reason is: {:?}", e);
+                }
             });
             Ok(())
         } else {
