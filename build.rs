@@ -130,7 +130,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         writeln!(
             &mut service_asset_file,
             r##"(r"/{name}", {counter}),"##,
-            name = f,
+            name = f.replace("\\", "/"),
             counter = i,
         )?;
         i = i + 1;
