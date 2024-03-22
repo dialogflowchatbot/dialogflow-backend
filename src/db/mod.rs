@@ -3,6 +3,7 @@ use std::vec::Vec;
 
 use once_cell::sync::Lazy;
 use redb::{Database, ReadableTable, TableDefinition};
+use redb::ReadableTableMetadata;
 
 use crate::external::http::crud as http;
 use crate::flow::mainflow::crud as mainflow;
@@ -56,8 +57,8 @@ pub(crate) async fn init() -> Result<Settings> {
 
 pub(crate) fn init_table<K, V>(table: TableDefinition<K, V>) -> Result<()>
 where
-    K: redb::RedbKey,
-    for<'b> V: redb::RedbValue<SelfType<'b> = &'b [u8]>,
+    K: redb::Key,
+    for<'b> V: redb::Value<SelfType<'b> = &'b [u8]>,
 {
     let write_txn = DB.begin_write().expect("Starting transaction failed");
     let _ = write_txn.open_table(table).expect("Opening table failed");
@@ -70,10 +71,10 @@ where
 // https://users.rust-lang.org/t/implementation-is-not-general-enough/57433/4
 pub(crate) fn query<'a, K, V, KEY, D>(table: TableDefinition<K, V>, key: KEY) -> Result<Option<D>>
 where
-    K: redb::RedbKey,
-    for<'b> V: redb::RedbValue<SelfType<'b> = &'b [u8]>,
+    K: redb::Key,
+    for<'b> V: redb::Value<SelfType<'b> = &'b [u8]>,
     D: serde::de::DeserializeOwned,
-    KEY: Borrow<&'a str> + std::borrow::Borrow<<K as redb::RedbValue>::SelfType<'a>>,
+    KEY: Borrow<&'a str> + std::borrow::Borrow<<K as redb::Value>::SelfType<'a>>,
 {
     let read = DB.begin_read()?;
     let table = read.open_table(table)?;
@@ -88,8 +89,8 @@ where
 
 pub(crate) fn get_all<K, V, D>(table: TableDefinition<K, V>) -> Result<Vec<D>>
 where
-    K: redb::RedbKey,
-    for<'b> V: redb::RedbValue<SelfType<'b> = &'b [u8]>,
+    K: redb::Key,
+    for<'b> V: redb::Value<SelfType<'b> = &'b [u8]>,
     D: serde::de::DeserializeOwned,
 {
     let read = DB.begin_read()?;
@@ -109,8 +110,8 @@ pub(crate) fn range<'a, K, V, KR, D>(
     range: impl std::ops::RangeBounds<KR> + 'a,
 ) -> Result<Vec<D>>
 where
-    K: redb::RedbKey,
-    for<'b> V: redb::RedbValue<SelfType<'b> = &'b [u8]>,
+    K: redb::Key,
+    for<'b> V: redb::Value<SelfType<'b> = &'b [u8]>,
     KR: Borrow<K::SelfType<'a>> + 'a,
     D: serde::de::DeserializeOwned,
 {
@@ -128,8 +129,8 @@ where
 
 pub(crate) fn count<K, V>(table: TableDefinition<K, V>) -> Result<u64>
 where
-    K: redb::RedbKey,
-    for<'a> V: redb::RedbValue<SelfType<'a> = &'a [u8]>,
+    K: redb::Key,
+    for<'a> V: redb::Value<SelfType<'a> = &'a [u8]>,
 {
     let read = DB.begin_read()?;
     let table = read.open_table(table)?;
@@ -143,7 +144,7 @@ where
 // https://users.rust-lang.org/t/requesting-help-with-saving-data-into-redb-lifetime-problem/98586/7
 pub(crate) fn write<V, D>(table: TableDefinition<&str, V>, key: &str, value: &D) -> Result<()>
 where
-    V: for<'a> redb::RedbValue<SelfType<'a> = &'a [u8]>,
+    V: for<'a> redb::Value<SelfType<'a> = &'a [u8]>,
     D: serde::Serialize,
 {
     match serde_json::to_vec(value) {
@@ -265,7 +266,7 @@ pub(crate) fn save_txn<V>(
     )>,
 ) -> Result<()>
 where
-    V: for<'b> redb::RedbValue<SelfType<'b> = &'b [u8]>,
+    V: for<'b> redb::Value<SelfType<'b> = &'b [u8]>,
 {
     // let db = Database::open(TABLE_FILE_NAME)?;
     let write_txn = DB.begin_write()?;
@@ -294,9 +295,9 @@ where
 
 pub(crate) fn remove<'a, K, V, KEY>(table: redb::TableDefinition<K, V>, key: KEY) -> Result<()>
 where
-    K: redb::RedbKey,
-    for<'b> V: redb::RedbValue<SelfType<'b> = &'b [u8]>,
-    KEY: Borrow<&'a str> + std::borrow::Borrow<<K as redb::RedbValue>::SelfType<'a>>,
+    K: redb::Key,
+    for<'b> V: redb::Value<SelfType<'b> = &'b [u8]>,
+    KEY: Borrow<&'a str> + std::borrow::Borrow<<K as redb::Value>::SelfType<'a>>,
 {
     // let db = Database::open(TABLE_FILE_NAME)?;
     let write_txn = DB.begin_write()?;

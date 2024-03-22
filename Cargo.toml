@@ -22,9 +22,9 @@ erased-serde = "0.4"
 itoa = "1.0"
 # jieba-rs = "0.6.7"
 once_cell = "1.19"
-redb = "1.5"
+redb = "2.0.0-beta0"
 regex = "1.10"
-reqwest = "0.11"
+reqwest = "0.12"
 rkyv = {version = "0.7", features = ["validation"]}
 scru128 = "3.0"
 serde = { version = "1", features = ["derive"] }
