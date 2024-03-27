@@ -54,6 +54,7 @@ pub(crate) struct ConditionData {
     pub(crate) ref_data: String,
     pub(crate) target_data: String,
     pub(crate) target_data_variant: TargetDataVariant,
+    pub(crate) case_sensitive_comparison: bool,
 }
 
 impl ConditionData {
@@ -126,7 +127,11 @@ impl ConditionData {
                     if let Ok(op) = variable::get(&self.ref_data) {
                         if let Some(v) = op {
                             if let Some(val) = v.get_value(req, ctx) {
-                                val.val_to_string().eq(&self.get_target_data(req, ctx))
+                                if self.case_sensitive_comparison {
+                                    val.val_to_string().eq(&self.get_target_data(req, ctx))
+                                } else {
+                                    unicase::eq(&val.val_to_string(), &self.get_target_data(req, ctx))
+                                }
                             } else {
                                 false
                             }
@@ -141,7 +146,11 @@ impl ConditionData {
                     if let Ok(op) = variable::get(&self.ref_data) {
                         if let Some(v) = op {
                             if let Some(val) = v.get_value(req, ctx) {
-                                !val.val_to_string().eq(&self.get_target_data(req, ctx))
+                                if self.case_sensitive_comparison {
+                                    !val.val_to_string().eq(&self.get_target_data(req, ctx))
+                                } else {
+                                    !unicase::eq(&val.val_to_string(), &self.get_target_data(req, ctx))
+                                }
                             } else {
                                 true
                             }
@@ -159,9 +168,16 @@ impl ConditionData {
                                 false
                             } else {
                                 if let Some(val) = v.get_value(req, ctx) {
-                                    val.val_to_string()
-                                        .find(&self.get_target_data(req, ctx))
-                                        .is_some()
+                                    if self.case_sensitive_comparison {
+                                        val.val_to_string().contains(&self.get_target_data(req, ctx))
+                                    } else {
+                                        let mut s = val.val_to_string();
+                                        s.make_ascii_lowercase();
+                                        s.contains(&self.get_target_data(req, ctx).to_lowercase())
+                                    }
+                                    // val.val_to_string()
+                                    //     .find(&self.get_target_data(req, ctx))
+                                    //     .is_some()
                                 } else {
                                     true
                                 }

@@ -277,6 +277,8 @@ pub(crate) struct BranchCondition {
     pub(crate) target_value: String,
     #[serde(rename = "targetValueVariant")]
     pub(crate) target_value_variant: TargetDataVariant,
+    #[serde(rename = "caseSensitiveComparison")]
+    pub(crate) case_sensitive_comparison: bool,
 }
 
 #[derive(Deserialize)]

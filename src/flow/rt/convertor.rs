@@ -188,6 +188,7 @@ fn convert_node(main_flow_id: &str, node: &mut Node) -> Result<()> {
                                 ref_data: cond.ref_choice.clone(),
                                 target_data: cond.target_value.clone(),
                                 target_data_variant: cond.target_value_variant,
+                                case_sensitive_comparison: cond.case_sensitive_comparison,
                             };
                             and_conditions.push(c);
                         }
@@ -196,7 +197,7 @@ fn convert_node(main_flow_id: &str, node: &mut Node) -> Result<()> {
                     let node = ConditionNode {
                         next_node_id: format!("{}-{}", &n.node_id, cnt),
                         goto_node_id: b.target_node_id.clone(),
-                        conditions: conditions,
+                        conditions,
                     };
                     let r = RuntimeNnodeEnum::ConditionNode(node);
                     let bytes = rkyv::to_bytes::<_, 256>(&r).unwrap();
