@@ -1,5 +1,8 @@
+use core::time::Duration;
+
 use enum_dispatch::enum_dispatch;
 use rkyv::{Archive, Deserialize, Serialize};
+use lettre::transport::smtp::PoolConfig;
 
 use super::condition::ConditionData;
 use super::context::Context;
@@ -298,6 +301,7 @@ impl SendEmailNode {
             settings.smtp_username.to_owned(),
             settings.smtp_password.to_owned(),
         );
+        let pool = PoolConfig::new().min_idle(1).max_size(2).idle_timeout(Duration::from_secs(300));
         if self.async_send {
             let builder = AsyncSmtpTransport::<Tokio1Executor>::relay(&settings.smtp_host)?;
             let mailer = builder
@@ -305,6 +309,7 @@ impl SendEmailNode {
                 .timeout(Some(core::time::Duration::from_secs(
                     settings.smtp_timeout_sec as u64,
                 )))
+                .pool_config(pool)
                 .build();
             tokio::spawn(async move {
                 // mailer.send(email) // will be wrong
@@ -319,6 +324,7 @@ impl SendEmailNode {
                 .timeout(Some(core::time::Duration::from_secs(
                     settings.smtp_timeout_sec as u64,
                 )))
+                .pool_config(pool)
                 .build();
 
             Ok(mailer.send(&email).map(|r| {
