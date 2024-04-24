@@ -50,7 +50,7 @@ fn build_req(
 ) -> reqwest::Result<RequestBuilder> {
     let client = reqwest::Client::builder()
         .connect_timeout(Duration::from_millis(1000))
-        .timeout(Duration::from_millis(info.timedout_milliseconds))
+        .read_timeout(Duration::from_millis(info.timedout_milliseconds))
         .build()?;
     let mut url = String::with_capacity(512);
     match info.protocol {

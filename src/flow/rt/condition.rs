@@ -72,9 +72,30 @@ impl ConditionData {
         // println!("{} {}", &target_data, &req.user_input);
         match self.condition_type {
             ConditionType::UserInput => match self.compare_type {
-                CompareType::Eq => self.get_target_data(req, ctx).eq(&req.user_input),
-                CompareType::Contains => req.user_input.contains(&self.get_target_data(req, ctx)),
+                CompareType::Eq => {
+                    if self.case_sensitive_comparison {
+                        println!(
+                            "{} {} {}",
+                            self.get_target_data(req, ctx),
+                            &req.user_input,
+                            self.get_target_data(req, ctx).eq(&req.user_input)
+                        );
+                        self.get_target_data(req, ctx).eq(&req.user_input)
+                    } else {
+                        unicase::eq(&self.get_target_data(req, ctx), &req.user_input)
+                    }
+                }
+                CompareType::Contains => {
+                    if self.case_sensitive_comparison {
+                        req.user_input.contains(&self.get_target_data(req, ctx))
+                    } else {
+                        let mut s = self.get_target_data(req, ctx);
+                        s.make_ascii_lowercase();
+                        s.contains(&req.user_input.to_lowercase())
+                    }
+                }
                 CompareType::Timeout => UserInputResult::Timeout == req.user_input_result,
+                CompareType::EmptyString => req.user_input.is_empty(),
                 _ => false,
             },
             ConditionType::UserIntent => {
@@ -130,7 +151,10 @@ impl ConditionData {
                                 if self.case_sensitive_comparison {
                                     val.val_to_string().eq(&self.get_target_data(req, ctx))
                                 } else {
-                                    unicase::eq(&val.val_to_string(), &self.get_target_data(req, ctx))
+                                    unicase::eq(
+                                        &val.val_to_string(),
+                                        &self.get_target_data(req, ctx),
+                                    )
                                 }
                             } else {
                                 false
@@ -149,7 +173,10 @@ impl ConditionData {
                                 if self.case_sensitive_comparison {
                                     !val.val_to_string().eq(&self.get_target_data(req, ctx))
                                 } else {
-                                    !unicase::eq(&val.val_to_string(), &self.get_target_data(req, ctx))
+                                    !unicase::eq(
+                                        &val.val_to_string(),
+                                        &self.get_target_data(req, ctx),
+                                    )
                                 }
                             } else {
                                 true
@@ -169,7 +196,8 @@ impl ConditionData {
                             } else {
                                 if let Some(val) = v.get_value(req, ctx) {
                                     if self.case_sensitive_comparison {
-                                        val.val_to_string().contains(&self.get_target_data(req, ctx))
+                                        val.val_to_string()
+                                            .contains(&self.get_target_data(req, ctx))
                                     } else {
                                         let mut s = val.val_to_string();
                                         s.make_ascii_lowercase();

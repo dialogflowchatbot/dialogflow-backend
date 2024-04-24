@@ -2,8 +2,8 @@ use std::borrow::{Borrow, Cow};
 use std::vec::Vec;
 
 use once_cell::sync::Lazy;
-use redb::{Database, ReadableTable, TableDefinition};
 use redb::ReadableTableMetadata;
+use redb::{Database, ReadableTable, TableDefinition};
 
 use crate::external::http::crud as http;
 use crate::flow::mainflow::crud as mainflow;
