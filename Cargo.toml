@@ -1,6 +1,6 @@
 [package]
 name = "dialogflow"
-version = "1.10.0"
+version = "1.10.2"
 edition = "2021"
 homepage = "https://dialogflowchatbot.github.io/"
 authors = ["dialogflowchatbot <dialogflow@yeah.net>"]
@@ -15,6 +15,7 @@ name = "dialogflow"
 [dependencies]
 # artful = "0.1.1"
 axum = {version = "0.7", features = ["query"]}
+bigdecimal = "0.4"
 colored = "2.1"
 # dashmap = "5.5.1"
 enum_dispatch = "0.3"

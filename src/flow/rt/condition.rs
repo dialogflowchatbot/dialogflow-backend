@@ -1,3 +1,6 @@
+use std::str::FromStr;
+
+use bigdecimal::BigDecimal;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
@@ -245,10 +248,10 @@ impl ConditionData {
                                 false
                             } else {
                                 if let Some(val) = v.get_value(req, ctx) {
-                                    if let Ok(n1) = val.val_to_string().parse::<f64>() {
+                                    if let Ok(n1) = BigDecimal::from_str(&val.val_to_string()) {
                                         // println!("get_target_data {} {:?} |{}|", self.target_data, self.target_data_variant, self.get_target_data(req, ctx));
                                         if let Ok(n2) =
-                                            self.get_target_data(req, ctx).parse::<f64>()
+                                            BigDecimal::from_str(&self.get_target_data(req, ctx))
                                         {
                                             // println!("{} {}", n1, n2);
                                             n1 > n2
@@ -276,9 +279,9 @@ impl ConditionData {
                                 false
                             } else {
                                 if let Some(val) = v.get_value(req, ctx) {
-                                    if let Ok(n1) = val.val_to_string().parse::<f64>() {
+                                    if let Ok(n1) = BigDecimal::from_str(&val.val_to_string()) {
                                         if let Ok(n2) =
-                                            self.get_target_data(req, ctx).parse::<f64>()
+                                            BigDecimal::from_str(&self.get_target_data(req, ctx))
                                         {
                                             n1 >= n2
                                         } else {
@@ -305,9 +308,9 @@ impl ConditionData {
                                 false
                             } else {
                                 if let Some(val) = v.get_value(req, ctx) {
-                                    if let Ok(n1) = val.val_to_string().parse::<f64>() {
+                                    if let Ok(n1) = BigDecimal::from_str(&val.val_to_string()) {
                                         if let Ok(n2) =
-                                            self.get_target_data(req, ctx).parse::<f64>()
+                                            BigDecimal::from_str(&self.get_target_data(req, ctx))
                                         {
                                             n1 < n2
                                         } else {
@@ -334,9 +337,9 @@ impl ConditionData {
                                 false
                             } else {
                                 if let Some(val) = v.get_value(req, ctx) {
-                                    if let Ok(n1) = val.val_to_string().parse::<f64>() {
+                                    if let Ok(n1) = BigDecimal::from_str(&val.val_to_string()) {
                                         if let Ok(n2) =
-                                            self.get_target_data(req, ctx).parse::<f64>()
+                                            BigDecimal::from_str(&self.get_target_data(req, ctx))
                                         {
                                             n1 <= n2
                                         } else {
