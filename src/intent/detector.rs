@@ -1,3 +1,4 @@
+use fastembed::{TextEmbedding, InitOptions, EmbeddingModel};
 use regex::Regex;
 
 use super::dto::{Intent, IntentDetail};
@@ -28,4 +29,15 @@ pub(crate) fn detect(s: &str) -> Result<Option<String>> {
         }
     }
     Ok(None)
+}
+
+pub(crate) fn embedding(s: &str) -> Result<()> {
+    let model = TextEmbedding::try_new(InitOptions {
+        model_name: EmbeddingModel::AllMiniLML6V2,
+        show_download_progress: true,
+        ..Default::default()
+    })?;
+    let embeddings = model.embed(vec![s], None)?;
+    println!("Embedding dimension: {}", embeddings[0].len());
+    Ok(())// builder.
 }
