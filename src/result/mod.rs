@@ -104,3 +104,9 @@ impl From<lettre::error::Error> for Error {
         Error::ErrorWithMessage(format!("{:?}", err))
     }
 }
+
+impl From<oasysdb::prelude::Error> for Error {
+    fn from(err: oasysdb::prelude::Error) -> Self {
+        Error::ErrorWithMessage(format!("{:?}", err))
+    }
+}
