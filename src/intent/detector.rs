@@ -1,4 +1,6 @@
-use fastembed::{TextEmbedding, InitOptions, EmbeddingModel};
+use std::sync::OnceLock;
+
+use fastembed::{TextEmbedding, UserDefinedEmbeddingModel, TokenizerFiles};
 use regex::Regex;
 
 use super::dto::{Intent, IntentDetail};
@@ -31,13 +33,33 @@ pub(crate) fn detect(s: &str) -> Result<Option<String>> {
     Ok(None)
 }
 
+static EMBEDDING_MODEL: OnceLock<Option<TextEmbedding>> = OnceLock::new();
+
 pub(crate) fn embedding(s: &str) -> Result<()> {
-    let model = TextEmbedding::try_new(InitOptions {
-        model_name: EmbeddingModel::AllMiniLML6V2,
-        show_download_progress: true,
-        ..Default::default()
-    })?;
-    let embeddings = model.embed(vec![s], None)?;
-    println!("Embedding dimension: {}", embeddings[0].len());
+    let model = EMBEDDING_MODEL.get_or_init(|| {
+        let config = UserDefinedEmbeddingModel {
+            onnx_file: std::fs::read("D:\\work\\models\\bge-small-en-v1.5\\onnx\\model.onnx").unwrap(),
+            tokenizer_files: TokenizerFiles {
+                tokenizer_file: std::fs::read("D:\\work\\models\\bge-small-en-v1.5\\tokenizer.json").unwrap(),
+                config_file: std::fs::read("D:\\work\\models\\bge-small-en-v1.5\\config.json").unwrap(),
+                special_tokens_map_file: std::fs::read("D:\\work\\models\\bge-small-en-v1.5\\special_tokens_map.json").unwrap(),
+                tokenizer_config_file: std::fs::read("D:\\work\\models\\bge-small-en-v1.5\\tokenizer_config.json").unwrap()
+            }
+        };
+        let opt: fastembed::InitOptionsUserDefined = fastembed::InitOptionsUserDefined {
+            execution_providers: vec![fastembed::ExecutionProviderDispatch::CPU(ort::CPUExecutionProvider::default())],
+            max_length:512,
+        };
+        if let Ok(model) = TextEmbedding::try_new_from_user_defined(config, opt) {
+            Some(model)
+        } else {
+            None
+        }
+    });
+    if let Some(m) = model {
+        if let Ok(embeddings) = m.embed(vec![s], None) {
+            println!("Embedding dimension: {}", embeddings[0].len());
+        }
+    }
     Ok(())// builder.
 }
