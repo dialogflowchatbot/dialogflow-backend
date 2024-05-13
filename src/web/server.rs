@@ -153,6 +153,10 @@ fn gen_router() -> Router {
             "/intent",
             get(intent::list).post(intent::add).delete(intent::remove),
         )
+        .route(
+            "/intent/detect",
+            post(intent::detect),
+        )
         .route("/intent/detail", get(intent::detail))
         .route(
             "/intent/keyword",

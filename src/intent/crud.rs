@@ -4,7 +4,7 @@ use axum::extract::Query;
 use axum::response::IntoResponse;
 use axum::Json;
 
-use super::detector::save_intent_embedding;
+use super::detector;
 use super::dto::{Intent, IntentDetail, IntentFormData};
 use crate::db;
 use crate::result::{Error, Result};
@@ -278,7 +278,7 @@ pub(crate) async fn add_phrase(Json(params): Json<IntentFormData>) -> impl IntoR
     let r: Result<Option<IntentDetail>> = db::query(TABLE, key);
     let r = r.and_then(|op| {
         if let Some(mut d) = op {
-            let r = save_intent_embedding(key, &params.data);
+            let r = detector::save_intent_embedding(key, &params.data);
             if r.is_err() {
                 return r;
             }
@@ -319,4 +319,8 @@ pub(crate) async fn remove_phrase(Json(params): Json<IntentFormData>) -> impl In
             })
         });
     to_res(r)
+}
+
+pub(crate) async fn detect(Json(params): Json<IntentFormData>) -> impl IntoResponse {
+    to_res(detector::detect(&params.data))
 }

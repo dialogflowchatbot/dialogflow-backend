@@ -31,7 +31,7 @@ pub(crate) fn detect(s: &str) -> Result<Option<String>> {
                     }
                 }
             }
-            let db = match Database::open("") {
+            let db = match Database::open("data/intent_embeddings") {
                 Ok(db) => db,
                 Err(e) => {
                     log::error!("Failed open database {}", &e);
@@ -50,10 +50,13 @@ pub(crate) fn detect(s: &str) -> Result<Option<String>> {
                     search_vector = Some(op.pop().unwrap().into());
                 }
             }
-            if (search_vector.is_some()) {
-                let r = collection.search(search_vector.as_ref().unwrap(), 5)?;
-                for i in r.iter() {
-                    log::info!("i.distance={}", i.distance)
+            if search_vector.is_some() {
+                let results = collection.search(search_vector.as_ref().unwrap(), 5)?;
+                for r in results.iter() {
+                    log::info!("r.distance={}", r.distance);
+                    if r.distance >= 0.9 {
+                        return Ok(Some(i.name.clone()));
+                    }
                 }
             }
         }
@@ -120,10 +123,8 @@ pub(crate) fn save_intent_embedding(intent_id: &str, s: &str) -> Result<()> {
     let mut config = Config::default();
     config.distance = Distance::Cosine;
     let collection = Collection::build(&config, &records)?;
-    let mut path = String::from("data/intent/");
-    path.push_str(intent_id);
-    let mut db = Database::open(&path)?;
-    db.save_collection("vectors", &collection)?;
+    let mut db = Database::open("data/intent_embeddings")?;
+    db.save_collection(intent_id, &collection)?;
     Ok(())
 }
 
