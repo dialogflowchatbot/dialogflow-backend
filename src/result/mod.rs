@@ -116,3 +116,9 @@ impl From<anyhow::Error> for Error {
         Error::ErrorWithMessage(format!("{:?}", err))
     }
 }
+
+impl From<reqwest::Error> for Error {
+    fn from(err: reqwest::Error) -> Self {
+        Error::ErrorWithMessage(format!("{:?}", err))
+    }
+}

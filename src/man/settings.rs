@@ -18,6 +18,8 @@ pub(crate) struct Settings {
     pub(crate) port: u16,
     #[serde(rename = "maxSessionDurationMin")]
     pub(crate) max_session_duration_min: u16,
+    #[serde(rename = "embeddingProvider")]
+    pub(crate) embedding_provider: EmbeddingProvider,
     #[serde(rename = "smtpHost")]
     pub(crate) smtp_host: String,
     #[serde(rename = "smtpUsername")]
@@ -32,12 +34,28 @@ pub(crate) struct Settings {
     pub(crate) select_random_port_when_conflict: bool,
 }
 
+#[derive(Deserialize, Serialize)]
+pub(crate) struct EmbeddingProvider {
+    pub(crate) provider: crate::intent::embedding::EmbeddingProvider,
+    #[serde(rename = "apiUrl")]
+    pub(crate) api_url: String,
+    #[serde(rename = "apiKey")]
+    pub(crate) api_key: String,
+    pub(crate) model: String,
+}
+
 impl Default for Settings {
     fn default() -> Self {
         Settings {
             ip: String::from("127.0.0.1"),
             port: 12715,
             max_session_duration_min: 30,
+            embedding_provider: EmbeddingProvider {
+                provider: crate::intent::embedding::EmbeddingProvider::HuggingFace,
+                api_url: String::new(),
+                api_key: String::new(),
+                model: String::new(),
+            },
             smtp_host: String::new(),
             smtp_username: String::new(),
             smtp_password: String::new(),

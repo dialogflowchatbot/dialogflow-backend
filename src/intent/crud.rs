@@ -276,20 +276,24 @@ pub(crate) async fn remove_regex(Json(params): Json<IntentFormData>) -> impl Int
 pub(crate) async fn add_phrase(Json(params): Json<IntentFormData>) -> impl IntoResponse {
     let key = params.id.as_str();
     let r: Result<Option<IntentDetail>> = db::query(TABLE, key);
-    let r = r.and_then(|op| {
-        if let Some(mut d) = op {
-            let r = detector::save_intent_embedding(key, &params.data);
-            if r.is_err() {
-                return r;
-            }
-            d.phrases.push(String::from(params.data.as_str()));
-            let idx = d.intent_idx;
-            change_num(key, &mut d, |i: &mut Vec<Intent>| {
-                i[idx].phrase_num = i[idx].phrase_num + 1
-            })
-        } else {
-            Ok(())
-        }
+    if r.is_err() {
+        return to_res(r.map(|_| ()));
+    }
+    let r = r.unwrap();
+    if r.is_none() {
+        return to_res(Err(Error::ErrorWithMessage(String::from(
+            "Can NOT find intention detail",
+        ))));
+    }
+    let mut d = r.unwrap();
+    let r = detector::save_intent_embedding(key, &params.data).await;
+    if r.is_err() {
+        return to_res(r);
+    }
+    d.phrases.push(String::from(params.data.as_str()));
+    let idx = d.intent_idx;
+    let r = change_num(key, &mut d, |i: &mut Vec<Intent>| {
+        i[idx].phrase_num = i[idx].phrase_num + 1
     });
     to_res(r)
 }
@@ -322,5 +326,5 @@ pub(crate) async fn remove_phrase(Json(params): Json<IntentFormData>) -> impl In
 }
 
 pub(crate) async fn detect(Json(params): Json<IntentFormData>) -> impl IntoResponse {
-    to_res(detector::detect(&params.data))
+    to_res(detector::detect(&params.data).await)
 }

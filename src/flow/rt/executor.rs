@@ -4,7 +4,7 @@ use crate::flow::rt::node::RuntimeNode;
 use crate::intent::detector;
 use crate::result::{Error, Result};
 
-pub(in crate::flow::rt) fn process(req: &mut Request) -> Result<Response> {
+pub(in crate::flow::rt) async fn process(req: &mut Request) -> Result<Response> {
     // let now = std::time::Instant::now();
     let mut ctx = Context::get(&req.session_id);
     // println!("get ctx {:?}", now.elapsed());
@@ -16,7 +16,7 @@ pub(in crate::flow::rt) fn process(req: &mut Request) -> Result<Response> {
     // println!("add_node {:?}", now.elapsed());
     // let now = std::time::Instant::now();
     if req.user_input_intent.is_none() {
-        req.user_input_intent = detector::detect(&req.user_input)?;
+        req.user_input_intent = detector::detect(&req.user_input).await?;
         // println!("{:?}", req.user_input_intent);
     }
     if !req.import_variables.is_empty() {
