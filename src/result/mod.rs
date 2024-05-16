@@ -122,3 +122,9 @@ impl From<reqwest::Error> for Error {
         Error::ErrorWithMessage(format!("{:?}", err))
     }
 }
+
+impl From<hf_hub::api::tokio::ApiError> for Error {
+    fn from(err: hf_hub::api::tokio::ApiError) -> Self {
+        Error::ErrorWithMessage(format!("{:?}", err))
+    }
+}

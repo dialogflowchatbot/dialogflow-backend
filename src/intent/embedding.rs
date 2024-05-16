@@ -4,6 +4,7 @@ use std::collections::VecDeque;
 use std::sync::OnceLock;
 use std::vec::Vec;
 
+use hf_hub::api::tokio::ApiBuilder;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
@@ -30,6 +31,25 @@ pub(super) async fn embedding(s: &str) -> Result<Vec<f32>> {
 }
 
 static EMBEDDING_MODEL: OnceLock<Option<fastembed::TextEmbedding>> = OnceLock::new();
+
+enum HuggingFaceModel {
+    Small(Vec<String>),
+}
+
+// impl HuggingFaceModel {
+//     pub(crate) fn get_files(&'static self) -> &'static Vec<String> {
+//     }
+// }
+
+async fn hf_hub_downloader(name: &str) -> Result<()> {
+    let api = ApiBuilder::new().with_progress(true).with_cache_dir("./data/hf_hub".into()).build()?;
+
+    let _filename = api
+        .model(name.to_string())
+        .get("model-00001-of-00002.safetensors")
+        .await?;
+    Ok(())
+}
 
 async fn hugging_face2(s: &str) -> Result<Vec<Vec<f32>>> {
     let model = EMBEDDING_MODEL.get_or_init(|| {
