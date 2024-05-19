@@ -128,3 +128,9 @@ impl From<hf_hub::api::tokio::ApiError> for Error {
         Error::ErrorWithMessage(format!("{:?}", err))
     }
 }
+
+impl From<std::io::Error> for Error {
+    fn from(err: std::io::Error) -> Self {
+        Error::ErrorWithMessage(format!("{:?}", err))
+    }
+}
