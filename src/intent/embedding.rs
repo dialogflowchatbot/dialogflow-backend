@@ -4,26 +4,30 @@ use std::collections::VecDeque;
 use std::sync::OnceLock;
 use std::vec::Vec;
 
+use futures_util::StreamExt;
 use hf_hub::api::tokio::ApiBuilder;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
+use tokio::fs::OpenOptions;
+use tokio::io::AsyncWriteExt;
 
 use crate::man::settings;
 use crate::result::{Error, Result};
 
 #[derive(Deserialize, Serialize)]
+#[serde(tag = "provider", content = "model")]
 pub(crate) enum EmbeddingProvider {
-    HuggingFace,
-    OpenAI,
-    Ollama,
+    HuggingFace(HuggingFaceModel),
+    OpenAI(String),
+    Ollama(String),
 }
 
 pub(super) async fn embedding(s: &str) -> Result<Vec<f32>> {
     if let Some(settings) = settings::get_settings()? {
         match settings.embedding_provider.provider {
-            EmbeddingProvider::HuggingFace => hugging_face(s).await,
-            EmbeddingProvider::OpenAI => open_ai(s).await,
-            EmbeddingProvider::Ollama => ollama(s).await,
+            EmbeddingProvider::HuggingFace(m) => hugging_face(&m.get_info(), s).await,
+            EmbeddingProvider::OpenAI(m) => open_ai(&m, s).await,
+            EmbeddingProvider::Ollama(m) => ollama(&m, s).await,
         }
     } else {
         Ok(vec![])
@@ -32,26 +36,89 @@ pub(super) async fn embedding(s: &str) -> Result<Vec<f32>> {
 
 static EMBEDDING_MODEL: OnceLock<Option<fastembed::TextEmbedding>> = OnceLock::new();
 
-enum HuggingFaceModel {
-    Small(Vec<String>),
+#[derive(Deserialize, Serialize)]
+pub(crate) enum HuggingFaceModel {
+    AllMiniLML6V2,
+    BgeSmallEnV1_5,
+    BgeBaseEnV1_5,
 }
 
-// impl HuggingFaceModel {
-//     pub(crate) fn get_files(&'static self) -> &'static Vec<String> {
-//     }
-// }
+struct HuggingFaceModelInfo {
+    repository: String,
+    model_file: String,
+    dimenssions: u32,
+}
 
-async fn hf_hub_downloader(name: &str) -> Result<()> {
-    let api = ApiBuilder::new().with_progress(true).with_cache_dir("./data/hf_hub".into()).build()?;
+impl HuggingFaceModel {
+    fn get_info(&self) -> HuggingFaceModelInfo {
+        match self {
+            HuggingFaceModel::AllMiniLML6V2 => HuggingFaceModelInfo {
+                repository: String::from("Qdrant/all-MiniLM-L6-v2-onnx"),
+                model_file: String::from("model.onnx"),
+                dimenssions: 384,
+            },
+            HuggingFaceModel::BgeSmallEnV1_5 => HuggingFaceModelInfo {
+                repository: todo!(),
+                model_file: todo!(),
+                dimenssions: todo!()
+            },
+            HuggingFaceModel::BgeBaseEnV1_5 => HuggingFaceModelInfo {
+                repository: todo!(),
+                model_file: todo!(),
+                dimenssions: todo!()
+            },
+        }
+    }
+}
 
-    let _filename = api
-        .model(name.to_string())
-        .get("model-00001-of-00002.safetensors")
-        .await?;
+async fn hf_hub_downloader(info: &HuggingFaceModelInfo) -> Result<()> {
+    let root_path = format!("./data/hf_hub/{}", info.repository);
+    tokio::fs::create_dir_all(&root_path).await?;
+    let u = "https://huggingface.co/GanymedeNil/text2vec-large-chinese/resolve/main/tokenizer.json?download=true";
+    let mut builder = reqwest::Client::builder()
+        .connect_timeout(Duration::from_millis(5000))
+        .read_timeout(Duration::from_millis(10000));
+    let proxy = std::env::var("https_proxy")?;
+    if !proxy.is_empty() {
+        log::info!("Detected proxy setting: {}", &proxy);
+        builder = builder.proxy(reqwest::Proxy::https(&proxy)?)
+    }
+    let client = builder.build()?;
+    let files = vec![&info.model_file, "tokenizer.json", "config.json", "special_tokens_map.json", "tokenizer_config.json"];
+    for &f in files.iter() {
+        let file_path_str = format!("{}/{}", &root_path, f);
+        let file_path = std::path::Path::new(&file_path_str);
+        if tokio::fs::try_exists(file_path).await? {
+            continue;
+        }
+        let res = client.get(u).send().await?;
+        let total_size = res.content_length().unwrap();
+        println!("Downloading {f}, total size {total_size}");
+        // let b = res.bytes().await?;
+        // fs::write("./temp.file", b.as_ref()).await?;
+        let mut downloaded = 0u64;
+        let mut stream = res.bytes_stream();
+        let mut file = OpenOptions::new()
+            .read(false)
+            .write(true)
+            .truncate(false)
+            .create(false)
+            .open(file_path)
+            .await?;
+        // let mut file = File::create("./temp.file").await?;
+    
+        while let Some(item) = stream.next().await {
+            let chunk = item?;
+            file.write_all(&chunk).await?;
+            let new = std::cmp::min(downloaded + (chunk.len() as u64), total_size);
+            println!("Downloaded {new}");
+            downloaded = new;
+        }
+    }
     Ok(())
 }
 
-async fn hugging_face2(s: &str) -> Result<Vec<Vec<f32>>> {
+async fn hugging_face(info: &HuggingFaceModelInfo, s: &str) -> Result<Vec<f32>> {
     let model = EMBEDDING_MODEL.get_or_init(|| {
         let model_files = [
             "D:\\work\\models\\bge-small-en-v1.5\\onnx\\model.onnx",
@@ -92,26 +159,25 @@ async fn hugging_face2(s: &str) -> Result<Vec<Vec<f32>>> {
         }
     });
     if let Some(m) = model {
-        let embeddings = m.embed(vec![s], None)?;
-        return Ok(embeddings);
+        let mut embeddings = m.embed(vec![s], None)?;
+        if embeddings.is_empty() {
+            return Err(Error::ErrorWithMessage(String::from("Embedding data was empty.")));
+        }
+        return Ok(embeddings.remove(0));
     }
     Err(Error::ErrorWithMessage(String::from(
         "Hugging Face model files can NOT be found.",
     )))
 }
 
-async fn hugging_face(s: &str) -> Result<Vec<f32>> {
-    Ok(vec![0f32])
-}
-
-async fn open_ai(s: &str) -> Result<Vec<f32>> {
+async fn open_ai(m: &str,s: &str) -> Result<Vec<f32>> {
     let client = reqwest::Client::builder()
         .connect_timeout(Duration::from_millis(1000))
         .read_timeout(Duration::from_millis(10000))
         .build()?;
     let mut map = Map::new();
     map.insert(String::from("input"), Value::String(String::from(s)));
-    map.insert(String::from("model"), Value::String(String::from(s)));
+    map.insert(String::from("model"), Value::String(String::from(m)));
     let obj = Value::Object(map);
     let req = client
         .post("https://api.openai.com/v1/embeddings")
@@ -142,14 +208,14 @@ async fn open_ai(s: &str) -> Result<Vec<f32>> {
     Ok(embedding_result)
 }
 
-async fn ollama(s: &str) -> Result<Vec<f32>> {
+async fn ollama(m: &str, s: &str) -> Result<Vec<f32>> {
     let client = reqwest::Client::builder()
         .connect_timeout(Duration::from_millis(1000))
         .read_timeout(Duration::from_millis(10000))
         .build()?;
     let mut map = Map::new();
     map.insert(String::from("prompt"), Value::String(String::from(s)));
-    map.insert(String::from("model"), Value::String(String::from(s)));
+    map.insert(String::from("model"), Value::String(String::from(m)));
     let obj = Value::Object(map);
     let req = client
         .post("https://api.openai.com/v1/embeddings")
