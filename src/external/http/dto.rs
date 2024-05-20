@@ -42,8 +42,8 @@ pub(crate) struct HttpReqInfo {
     pub(crate) protocol: Protocol,
     pub(crate) method: Method,
     pub(crate) address: String,
-    #[serde(rename = "timedoutMilliseconds")]
-    pub(crate) timedout_milliseconds: u64,
+    #[serde(rename = "timeoutMilliseconds")]
+    pub(crate) timeout_milliseconds: u64,
     #[serde(rename = "postContentType")]
     pub(crate) post_content_type: PostContentType,
     pub(crate) headers: Vec<HttpReqParam>,

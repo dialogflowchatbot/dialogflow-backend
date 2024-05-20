@@ -1,11 +1,10 @@
 use core::time::Duration;
 
 use std::collections::VecDeque;
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 use std::vec::Vec;
 
 use futures_util::StreamExt;
-use hf_hub::api::tokio::ApiBuilder;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use tokio::fs::OpenOptions;
@@ -60,21 +59,30 @@ impl HuggingFaceModel {
             HuggingFaceModel::BgeSmallEnV1_5 => HuggingFaceModelInfo {
                 repository: todo!(),
                 model_file: todo!(),
-                dimenssions: todo!()
+                dimenssions: todo!(),
             },
             HuggingFaceModel::BgeBaseEnV1_5 => HuggingFaceModelInfo {
                 repository: todo!(),
                 model_file: todo!(),
-                dimenssions: todo!()
+                dimenssions: todo!(),
             },
         }
     }
 }
 
-async fn hf_hub_downloader(info: &HuggingFaceModelInfo) -> Result<()> {
-    let root_path = format!("./data/hf_hub/{}", info.repository);
+const HUGGING_FACE_MODEL_ROOT: &str = "./data/hf_hub/";
+
+struct DownloadStatus {
+    total_len: u64,
+    downloaded_len: u64,
+    url: String,
+}
+
+static DOWNLOAD_STATUS: OnceLock<Mutex<Option<DownloadStatus>>> = OnceLock::new();
+
+async fn download_hf_models(info: &HuggingFaceModelInfo) -> Result<()> {
+    let root_path = format!("{}{}", HUGGING_FACE_MODEL_ROOT, info.repository);
     tokio::fs::create_dir_all(&root_path).await?;
-    let u = "https://huggingface.co/GanymedeNil/text2vec-large-chinese/resolve/main/tokenizer.json?download=true";
     let mut builder = reqwest::Client::builder()
         .connect_timeout(Duration::from_millis(5000))
         .read_timeout(Duration::from_millis(10000));
@@ -84,19 +92,29 @@ async fn hf_hub_downloader(info: &HuggingFaceModelInfo) -> Result<()> {
         builder = builder.proxy(reqwest::Proxy::https(&proxy)?)
     }
     let client = builder.build()?;
-    let files = vec![&info.model_file, "tokenizer.json", "config.json", "special_tokens_map.json", "tokenizer_config.json"];
+    let files = vec![
+        &info.model_file,
+        "tokenizer.json",
+        "config.json",
+        "special_tokens_map.json",
+        "tokenizer_config.json",
+    ];
     for &f in files.iter() {
         let file_path_str = format!("{}/{}", &root_path, f);
         let file_path = std::path::Path::new(&file_path_str);
         if tokio::fs::try_exists(file_path).await? {
             continue;
         }
-        let res = client.get(u).send().await?;
+        let u = format!(
+            "https://huggingface.co/{}/resolve/main/{}?download=true",
+            &info.repository, f
+        );
+        let res = client.get(&u).send().await?;
         let total_size = res.content_length().unwrap();
         println!("Downloading {f}, total size {total_size}");
         // let b = res.bytes().await?;
         // fs::write("./temp.file", b.as_ref()).await?;
-        let mut downloaded = 0u64;
+        // let mut downloaded = 0u64;
         let mut stream = res.bytes_stream();
         let mut file = OpenOptions::new()
             .read(false)
@@ -106,13 +124,35 @@ async fn hf_hub_downloader(info: &HuggingFaceModelInfo) -> Result<()> {
             .open(file_path)
             .await?;
         // let mut file = File::create("./temp.file").await?;
-    
+
+        let mut download_status = DownloadStatus {
+            total_len: total_size,
+            downloaded_len: 0,
+            url: u.clone(),
+        };
+        let locker = DOWNLOAD_STATUS.get_or_init(|| {
+            Mutex::new(Some(DownloadStatus {
+                total_len: total_size,
+                downloaded_len: 0,
+                url: u,
+            }))
+        });
+
         while let Some(item) = stream.next().await {
             let chunk = item?;
             file.write_all(&chunk).await?;
-            let new = std::cmp::min(downloaded + (chunk.len() as u64), total_size);
-            println!("Downloaded {new}");
-            downloaded = new;
+            match locker.lock() {
+                Ok(mut op) => match op.as_mut() {
+                    Some(v) => {
+                        let new =
+                            std::cmp::min(v.downloaded_len + (chunk.len() as u64), total_size);
+                        log::info!("Downloaded {new}");
+                        v.downloaded_len = new;
+                    }
+                    None => log::warn!("DownloadStatus was not found."),
+                },
+                Err(e) => log::warn!("{:?}", &e),
+            }
         }
     }
     Ok(())
@@ -121,15 +161,16 @@ async fn hf_hub_downloader(info: &HuggingFaceModelInfo) -> Result<()> {
 async fn hugging_face(info: &HuggingFaceModelInfo, s: &str) -> Result<Vec<f32>> {
     let model = EMBEDDING_MODEL.get_or_init(|| {
         let model_files = [
-            "D:\\work\\models\\bge-small-en-v1.5\\onnx\\model.onnx",
-            "D:\\work\\models\\bge-small-en-v1.5\\tokenizer.json",
-            "D:\\work\\models\\bge-small-en-v1.5\\config.json",
-            "D:\\work\\models\\bge-small-en-v1.5\\special_tokens_map.json",
-            "D:\\work\\models\\bge-small-en-v1.5\\tokenizer_config.json",
+            "model.onnx",
+            "tokenizer.json",
+            "config.json",
+            "special_tokens_map.json",
+            "tokenizer_config.json",
         ];
         let mut model_file_streams = VecDeque::with_capacity(model_files.len());
         for &f in model_files.iter() {
-            match std::fs::read(f) {
+            let file_path = format!("{}{}/{}", HUGGING_FACE_MODEL_ROOT, info.repository, f);
+            match std::fs::read(&file_path) {
                 Ok(s) => model_file_streams.push_back(s),
                 Err(e) => {
                     log::warn!("Failed read model file {f}, err: {}, ", e);
@@ -161,7 +202,9 @@ async fn hugging_face(info: &HuggingFaceModelInfo, s: &str) -> Result<Vec<f32>> 
     if let Some(m) = model {
         let mut embeddings = m.embed(vec![s], None)?;
         if embeddings.is_empty() {
-            return Err(Error::ErrorWithMessage(String::from("Embedding data was empty.")));
+            return Err(Error::ErrorWithMessage(String::from(
+                "Embedding data was empty.",
+            )));
         }
         return Ok(embeddings.remove(0));
     }
@@ -170,7 +213,7 @@ async fn hugging_face(info: &HuggingFaceModelInfo, s: &str) -> Result<Vec<f32>> 
     )))
 }
 
-async fn open_ai(m: &str,s: &str) -> Result<Vec<f32>> {
+async fn open_ai(m: &str, s: &str) -> Result<Vec<f32>> {
     let client = reqwest::Client::builder()
         .connect_timeout(Duration::from_millis(1000))
         .read_timeout(Duration::from_millis(10000))

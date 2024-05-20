@@ -50,7 +50,7 @@ fn build_req(
 ) -> reqwest::Result<RequestBuilder> {
     let client = reqwest::Client::builder()
         .connect_timeout(Duration::from_millis(1000))
-        .read_timeout(Duration::from_millis(info.timedout_milliseconds))
+        .read_timeout(Duration::from_millis(info.timeout_milliseconds))
         .build()?;
     let mut url = String::with_capacity(512);
     match info.protocol {
@@ -59,7 +59,7 @@ fn build_req(
     }
     url.push_str("://");
     url.push_str(&info.address);
-    let req = match info.method {
+    let mut req = match info.method {
         Method::GET => client.get(&url),
         Method::POST => {
             let r = client.post(&url);
@@ -70,9 +70,7 @@ fn build_req(
             }
         }
     };
-    let req = if info.headers.is_empty() {
-        req
-    } else {
+    if !info.headers.is_empty() {
         let mut headers: HeaderMap<HeaderValue> = HeaderMap::with_capacity(info.headers.len());
         for p in info.headers.iter() {
             match p.value_source {
@@ -89,11 +87,9 @@ fn build_req(
                 ),
             };
         }
-        req.headers(headers)
-    };
-    let req = if info.query_params.is_empty() {
-        req
-    } else {
+        req = req.headers(headers);
+    }
+    if !info.query_params.is_empty() {
         let mut queries: Vec<(&str, String)> = Vec::with_capacity(info.query_params.len());
         for p in info.query_params.iter() {
             match p.value_source {
@@ -105,17 +101,13 @@ fn build_req(
                 )),
             }
         }
-        req.query(&queries)
-    };
-    let req = if info.post_content_type == PostContentType::JSON {
-        req.header("Content-Type", "application/json")
-    } else {
-        req
-    };
-    let req = if info.user_agent.is_empty() {
-        req
-    } else {
-        req.header("Content-Type", &info.user_agent)
-    };
-    Ok(req.timeout(Duration::from_millis(info.timedout_milliseconds)))
+        req = req.query(&queries);
+    }
+    if info.post_content_type == PostContentType::JSON {
+        req = req.header("Content-Type", "application/json");
+    }
+    if !info.user_agent.is_empty() {
+        req = req.header("Content-Type", &info.user_agent);
+    }
+    Ok(req.timeout(Duration::from_millis(info.timeout_milliseconds)))
 }

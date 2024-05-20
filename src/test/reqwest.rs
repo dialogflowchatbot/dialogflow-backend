@@ -14,8 +14,7 @@ async fn download() -> Result<()> {
         .proxy(reqwest::Proxy::https("http://127.0.0.1:7897")?)
         .build()?;
     let res = client.get(u).send().await?;
-    let total_size = res
-        .content_length().unwrap();
+    let total_size = res.content_length().unwrap();
     println!("Total size {total_size}");
     // let b = res.bytes().await?;
     // fs::write("./temp.file", b.as_ref()).await?;

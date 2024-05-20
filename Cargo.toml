@@ -25,7 +25,7 @@ enum_dispatch = "0.3"
 erased-serde = "0.4"
 fastembed = "3.5"
 futures-util = "0.3"
-hf-hub = { path = "./rslibs/hf-hub", default-features = false, features = ["tokio"] }
+# hf-hub = { path = "./rslibs/hf-hub", default-features = false, features = ["tokio"] }
 itoa = "1.0"
 # jieba-rs = "0.6.7"
 # lancedb = "0.4"
