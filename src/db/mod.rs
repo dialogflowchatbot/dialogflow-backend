@@ -16,7 +16,7 @@ use crate::web::server;
 
 // const TABLE: TableDefinition<&str, &[u8]> = TableDefinition::new("flow");
 // const RUNTIME_NODE_TABLE: TableDefinition<&str, &[u8]> = TableDefinition::new("runtimeNodes");
-const TABLE_FILE_NAME: &str = "flow.db";
+const TABLE_FILE_NAME: &str = "./data/flow.db";
 
 pub(crate) static DB: Lazy<Database> = Lazy::new(|| {
     let path = std::path::Path::new(TABLE_FILE_NAME);

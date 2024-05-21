@@ -107,7 +107,8 @@ fn build_req(
         req = req.header("Content-Type", "application/json");
     }
     if !info.user_agent.is_empty() {
-        req = req.header("Content-Type", &info.user_agent);
+        req = req.header("User-Agent", &info.user_agent);
     }
-    Ok(req.timeout(Duration::from_millis(info.timeout_milliseconds)))
+    // Ok(req.timeout(Duration::from_millis(info.timeout_milliseconds)))
+    Ok(req)
 }

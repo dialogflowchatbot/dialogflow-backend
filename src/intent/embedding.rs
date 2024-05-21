@@ -24,7 +24,7 @@ pub(crate) enum EmbeddingProvider {
 pub(super) async fn embedding(s: &str) -> Result<Vec<f32>> {
     if let Some(settings) = settings::get_settings()? {
         match settings.embedding_provider.provider {
-            EmbeddingProvider::HuggingFace(m) => hugging_face(&m.get_info(), s).await,
+            EmbeddingProvider::HuggingFace(m) => hugging_face(&m.get_info(), s),
             EmbeddingProvider::OpenAI(m) => open_ai(&m, s).await,
             EmbeddingProvider::Ollama(m) => ollama(&m, s).await,
         }
@@ -42,14 +42,14 @@ pub(crate) enum HuggingFaceModel {
     BgeBaseEnV1_5,
 }
 
-struct HuggingFaceModelInfo {
-    repository: String,
+pub(crate) struct HuggingFaceModelInfo {
+    pub(crate) repository: String,
     model_file: String,
     dimenssions: u32,
 }
 
 impl HuggingFaceModel {
-    fn get_info(&self) -> HuggingFaceModelInfo {
+    pub(crate) fn get_info(&self) -> HuggingFaceModelInfo {
         match self {
             HuggingFaceModel::AllMiniLML6V2 => HuggingFaceModelInfo {
                 repository: String::from("Qdrant/all-MiniLM-L6-v2-onnx"),
@@ -72,15 +72,29 @@ impl HuggingFaceModel {
 
 const HUGGING_FACE_MODEL_ROOT: &str = "./data/hf_hub/";
 
-struct DownloadStatus {
-    total_len: u64,
-    downloaded_len: u64,
-    url: String,
+#[derive(Clone, Serialize)]
+pub(crate) struct DownloadStatus {
+    pub(crate) total_len: u64,
+    pub(crate) downloaded_len: u64,
+    pub(crate) url: String,
 }
 
 static DOWNLOAD_STATUS: OnceLock<Mutex<Option<DownloadStatus>>> = OnceLock::new();
 
-async fn download_hf_models(info: &HuggingFaceModelInfo) -> Result<()> {
+pub(crate) fn get_download_status() -> Option<DownloadStatus> {
+    if let Some(l) = DOWNLOAD_STATUS.get() {
+        return match l.lock() {
+            Ok(s) => s.clone(),
+            Err(e) => {
+                log::error!("{:?}", &e);
+                None
+            }
+        };
+    }
+    None
+}
+
+pub(crate) async fn download_hf_models(info: &HuggingFaceModelInfo) -> Result<()> {
     let root_path = format!("{}{}", HUGGING_FACE_MODEL_ROOT, info.repository);
     tokio::fs::create_dir_all(&root_path).await?;
     let mut builder = reqwest::Client::builder()
@@ -106,10 +120,10 @@ async fn download_hf_models(info: &HuggingFaceModelInfo) -> Result<()> {
             continue;
         }
         let u = format!(
-            "https://huggingface.co/{}/resolve/main/{}?download=true",
+            "https://huggingface.co/{}/resolve/main/{}",
             &info.repository, f
         );
-        let res = client.get(&u).send().await?;
+        let res = client.get(&u).query(&[("download", "true")]).send().await?;
         let total_size = res.content_length().unwrap();
         println!("Downloading {f}, total size {total_size}");
         // let b = res.bytes().await?;
@@ -124,12 +138,6 @@ async fn download_hf_models(info: &HuggingFaceModelInfo) -> Result<()> {
             .open(file_path)
             .await?;
         // let mut file = File::create("./temp.file").await?;
-
-        let mut download_status = DownloadStatus {
-            total_len: total_size,
-            downloaded_len: 0,
-            url: u.clone(),
-        };
         let locker = DOWNLOAD_STATUS.get_or_init(|| {
             Mutex::new(Some(DownloadStatus {
                 total_len: total_size,
@@ -158,46 +166,60 @@ async fn download_hf_models(info: &HuggingFaceModelInfo) -> Result<()> {
     Ok(())
 }
 
-async fn hugging_face(info: &HuggingFaceModelInfo, s: &str) -> Result<Vec<f32>> {
+pub(crate) fn load_model(repository: &str) -> Result<fastembed::TextEmbedding> {
+    let model_files = [
+        "model.onnx",
+        "tokenizer.json",
+        "config.json",
+        "special_tokens_map.json",
+        "tokenizer_config.json",
+    ];
+    let mut model_file_streams = VecDeque::with_capacity(model_files.len());
+    for &f in model_files.iter() {
+        let file_path = format!("{}{}/{}", HUGGING_FACE_MODEL_ROOT, repository, f);
+        let stream = std::fs::read(&file_path)?;
+        model_file_streams.push_back(stream);
+        // match std::fs::read(&file_path) {
+        //     Ok(s) => model_file_streams.push_back(s),
+        //     Err(e) => {
+        //         log::warn!("Failed read model file {f}, err: {}, ", e);
+        //         return None;
+        //     }
+        // };
+    }
+    let config = fastembed::UserDefinedEmbeddingModel {
+        onnx_file: model_file_streams.pop_front().unwrap(),
+        tokenizer_files: fastembed::TokenizerFiles {
+            tokenizer_file: model_file_streams.pop_front().unwrap(),
+            config_file: model_file_streams.pop_front().unwrap(),
+            special_tokens_map_file: model_file_streams.pop_front().unwrap(),
+            tokenizer_config_file: model_file_streams.pop_front().unwrap(),
+        },
+    };
+    let opt: fastembed::InitOptionsUserDefined = fastembed::InitOptionsUserDefined {
+        execution_providers: vec![fastembed::ExecutionProviderDispatch::CPU(
+            ort::CPUExecutionProvider::default(),
+        )],
+        max_length: 512,
+    };
+    let r = fastembed::TextEmbedding::try_new_from_user_defined(config, opt)?;
+    Ok(r)
+}
+
+fn hugging_face(info: &HuggingFaceModelInfo, s: &str) -> Result<Vec<f32>> {
     let model = EMBEDDING_MODEL.get_or_init(|| {
-        let model_files = [
-            "model.onnx",
-            "tokenizer.json",
-            "config.json",
-            "special_tokens_map.json",
-            "tokenizer_config.json",
-        ];
-        let mut model_file_streams = VecDeque::with_capacity(model_files.len());
-        for &f in model_files.iter() {
-            let file_path = format!("{}{}/{}", HUGGING_FACE_MODEL_ROOT, info.repository, f);
-            match std::fs::read(&file_path) {
-                Ok(s) => model_file_streams.push_back(s),
-                Err(e) => {
-                    log::warn!("Failed read model file {f}, err: {}, ", e);
-                    return None;
-                }
-            };
+        match load_model(&info.repository) {
+            Ok(m) => Some(m),
+            Err(e) => {
+                log::error!("Failed read model files err: {:?}, ", e);
+                None
+            }
         }
-        let config = fastembed::UserDefinedEmbeddingModel {
-            onnx_file: model_file_streams.pop_front().unwrap(),
-            tokenizer_files: fastembed::TokenizerFiles {
-                tokenizer_file: model_file_streams.pop_front().unwrap(),
-                config_file: model_file_streams.pop_front().unwrap(),
-                special_tokens_map_file: model_file_streams.pop_front().unwrap(),
-                tokenizer_config_file: model_file_streams.pop_front().unwrap(),
-            },
-        };
-        let opt: fastembed::InitOptionsUserDefined = fastembed::InitOptionsUserDefined {
-            execution_providers: vec![fastembed::ExecutionProviderDispatch::CPU(
-                ort::CPUExecutionProvider::default(),
-            )],
-            max_length: 512,
-        };
-        if let Ok(model) = fastembed::TextEmbedding::try_new_from_user_defined(config, opt) {
-            Some(model)
-        } else {
-            None
-        }
+        // if let Ok(model) = load_model(&info.repository) {
+        //     Some(model)
+        // } else {
+        //     None
+        // }
     });
     if let Some(m) = model {
         let mut embeddings = m.embed(vec![s], None)?;
@@ -215,7 +237,7 @@ async fn hugging_face(info: &HuggingFaceModelInfo, s: &str) -> Result<Vec<f32>> 
 
 async fn open_ai(m: &str, s: &str) -> Result<Vec<f32>> {
     let client = reqwest::Client::builder()
-        .connect_timeout(Duration::from_millis(1000))
+        .connect_timeout(Duration::from_millis(2000))
         .read_timeout(Duration::from_millis(10000))
         .build()?;
     let mut map = Map::new();
@@ -228,7 +250,7 @@ async fn open_ai(m: &str, s: &str) -> Result<Vec<f32>> {
         .header("Authorization", "Bearer ")
         .body(serde_json::to_string(&obj)?);
     let r = req
-        .timeout(Duration::from_millis(10000))
+        // .timeout(Duration::from_millis(60000))
         .send()
         .await?
         .text()
@@ -253,7 +275,7 @@ async fn open_ai(m: &str, s: &str) -> Result<Vec<f32>> {
 
 async fn ollama(m: &str, s: &str) -> Result<Vec<f32>> {
     let client = reqwest::Client::builder()
-        .connect_timeout(Duration::from_millis(1000))
+        .connect_timeout(Duration::from_millis(2000))
         .read_timeout(Duration::from_millis(10000))
         .build()?;
     let mut map = Map::new();
@@ -264,7 +286,7 @@ async fn ollama(m: &str, s: &str) -> Result<Vec<f32>> {
         .post("https://api.openai.com/v1/embeddings")
         .body(serde_json::to_string(&obj)?);
     let r = req
-        .timeout(Duration::from_millis(10000))
+        // .timeout(Duration::from_millis(60000))
         .send()
         .await?
         .text()

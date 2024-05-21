@@ -198,6 +198,18 @@ fn gen_router() -> Router {
             "/management/settings",
             get(settings::get).post(settings::save),
         )
+        .route(
+            "/management/settings/model/download",
+            get(settings::download_model_files),
+        )
+        .route(
+            "/management/settings/model/download/progress",
+            get(settings::download_model_progress),
+        )
+        .route(
+            "/management/settings/model/check",
+            get(settings::check_model_files),
+        )
         .route("/management/settings/smtp/test", post(settings::smtp_test))
         .route("/flow/answer", post(rt::answer))
         .route("/version.json", get(version))

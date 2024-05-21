@@ -129,3 +129,42 @@ pub(crate) fn check_smtp_settings(settings: &Settings) -> Result<bool> {
 
     Ok(mailer.test_connection()?)
 }
+
+pub(crate) async fn download_model_files() -> impl IntoResponse {
+    if let Ok(op) = get_settings() {
+        if let Some(settings) = op {
+            if let crate::intent::embedding::EmbeddingProvider::HuggingFace(m) =
+                settings.embedding_provider.provider
+            {
+                let r = crate::intent::embedding::download_hf_models(&m.get_info()).await;
+                return to_res(r);
+            }
+        }
+    }
+    to_res(Err(Error::ErrorWithMessage(String::from(
+        "Failed load settings.",
+    ))))
+}
+
+pub(crate) async fn download_model_progress() -> impl IntoResponse {
+    let r = crate::intent::embedding::get_download_status();
+    to_res(Ok(r))
+}
+
+pub(crate) async fn check_model_files() -> impl IntoResponse {
+    if let Ok(op) = get_settings() {
+        if let Some(settings) = op {
+            if let crate::intent::embedding::EmbeddingProvider::HuggingFace(m) =
+                settings.embedding_provider.provider
+            {
+                let r = crate::intent::embedding::load_model(&m.get_info().repository);
+                if r.is_ok() {
+                    return to_res(Ok(()));
+                }
+            }
+        }
+    }
+    to_res(Err(Error::ErrorWithMessage(String::from(
+        "Failed load settings.",
+    ))))
+}
