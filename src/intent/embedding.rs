@@ -14,7 +14,7 @@ use crate::man::settings;
 use crate::result::{Error, Result};
 
 #[derive(Deserialize, Serialize)]
-#[serde(tag = "provider", content = "model")]
+#[serde(tag = "id", content = "model")]
 pub(crate) enum EmbeddingProvider {
     HuggingFace(HuggingFaceModel),
     OpenAI(String),

@@ -34,6 +34,37 @@ pub(crate) struct Settings {
     pub(crate) select_random_port_when_conflict: bool,
 }
 
+
+#[test]
+fn deser() {
+    let s = Settings {
+        ip: String::new(),
+        port: 12715,
+        max_session_duration_min: 60,
+        embedding_provider: EmbeddingProvider {
+            provider: crate::intent::embedding::EmbeddingProvider::HuggingFace(crate::intent::embedding::HuggingFaceModel::AllMiniLML6V2),
+            api_url: String::new(),
+            api_key: String::new(),
+            model: String::new()
+        },
+        smtp_host: String::new(),
+        smtp_username: String::new(),
+        smtp_password: String::new(),
+        smtp_timeout_sec: 30,
+        email_verification_regex: String::new(),
+        select_random_port_when_conflict: false
+    };
+    let j = serde_json::to_string(&s);
+    assert!(j.is_ok());
+    println!("{}", j.unwrap());
+    let j = "{\"ip\":\"127.0.0.1\",\"port\":12715,\"selectRandomPortWhenConflict\":false,\"maxSessionDurationMin\":30,\"smtpHost\":\"\",\"smtpUsername\":\"\",\"smtpPassword\":\"\",\"smtpTimeoutSec\":60,\"emailVerificationRegex\":\"[-\\w\\.\\+]{1,100}@[A-Za-z0-9]{1,30}[A-Za-z\\.]{2,30}\",\"embeddingProvider\":{\"provider\":\"HuggingFace\",\"apiUrl\":\"Model will be downloaded locally at ./data/models\",\"apiKey\":\"\",\"model\":\"AllMiniLML6V2\",\"apiUrlDisabled\":true,\"showApiKeyInput\":false}}";
+    let r = serde_json::from_str(j);
+    assert!(r.is_ok());
+    let v: serde_json::Value = r.unwrap();
+    assert_eq!(v["embeddingProvider"]["provider"], "HuggingFace");
+}
+
+
 #[derive(Deserialize, Serialize)]
 pub(crate) struct EmbeddingProvider {
     pub(crate) provider: crate::intent::embedding::EmbeddingProvider,
@@ -157,10 +188,18 @@ pub(crate) async fn check_model_files() -> impl IntoResponse {
             if let crate::intent::embedding::EmbeddingProvider::HuggingFace(m) =
                 settings.embedding_provider.provider
             {
-                let r = crate::intent::embedding::load_model(&m.get_info().repository);
-                if r.is_ok() {
-                    return to_res(Ok(()));
-                }
+                let r = match crate::intent::embedding::load_model(&m.get_info().repository) {
+                    Ok(_) => Ok(()),
+                    Err(e) => {
+                        let err = format!("Hugging face model files incorrect. Err: {:?}", &e);
+                        Err(Error::ErrorWithMessage(err))
+                    }
+                };
+                return to_res(r);
+            } else {
+                return to_res(Err(Error::ErrorWithMessage(String::from(
+                    "Provider is not HuggingFace.",
+                ))));
             }
         }
     }

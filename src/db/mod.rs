@@ -19,11 +19,15 @@ use crate::web::server;
 const TABLE_FILE_NAME: &str = "./data/flow.db";
 
 pub(crate) static DB: Lazy<Database> = Lazy::new(|| {
+    let data_folder = std::path::Path::new("./data");
+    if !data_folder.exists() {
+        std::fs::create_dir(data_folder).expect("Create data directory failed.");
+    }
     let path = std::path::Path::new(TABLE_FILE_NAME);
     if path.exists() {
-        Database::open(TABLE_FILE_NAME).expect("Open database failed")
+        Database::open(TABLE_FILE_NAME).expect("Open database failed.")
     } else {
-        let db = Database::create(TABLE_FILE_NAME).expect("Create database failed");
+        let db = Database::create(TABLE_FILE_NAME).expect("Create database failed.");
         // let write_txn = db.begin_write().expect("Starting transaction failed");
         // let _ = write_txn.open_table(TABLE).expect("Opening table failed");
         // // let _ = write_txn.open_table(RUNTIME_NODE_TABLE)?;
