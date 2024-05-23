@@ -23,7 +23,7 @@ colored = "2.1"
 # dashmap = "5.5.1"
 enum_dispatch = "0.3"
 erased-serde = "0.4"
-fastembed = "3.5"
+fastembed = "3.6"
 futures-util = "0.3"
 # hf-hub = { path = "./rslibs/hf-hub", default-features = false, features = ["tokio"] }
 itoa = "1.0"

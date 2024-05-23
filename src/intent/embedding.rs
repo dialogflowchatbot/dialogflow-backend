@@ -38,14 +38,23 @@ static EMBEDDING_MODEL: OnceLock<Option<fastembed::TextEmbedding>> = OnceLock::n
 #[derive(Deserialize, Serialize)]
 pub(crate) enum HuggingFaceModel {
     AllMiniLML6V2,
+    ParaphraseMLMiniLML12V2,
+    ParaphraseMLMpnetBaseV2,
     BgeSmallEnV1_5,
     BgeBaseEnV1_5,
+    BgeLargeEnV1_5,
+    BgeM3,
+    NomicEmbedTextV1_5,
+    MultilingualE5Small,
+    MultilingualE5Base,
+    MultilingualE5Large,
+    MxbaiEmbedLargeV1,
 }
 
 pub(crate) struct HuggingFaceModelInfo {
-    pub(crate) orig_repo: String,
-    repository: String,
-    model_file: String,
+    pub(crate) orig_repo: &'static str,
+    repository: &'static str,
+    model_files: Vec<&'static str>,
     dimenssions: u32,
 }
 
@@ -53,22 +62,76 @@ impl HuggingFaceModel {
     pub(crate) fn get_info(&self) -> HuggingFaceModelInfo {
         match self {
             HuggingFaceModel::AllMiniLML6V2 => HuggingFaceModelInfo {
-                orig_repo: String::from("Qdrant/all-MiniLM-L6-v2-onnx"),
-                repository: String::from("Qdrant/all-MiniLM-L6-v2-onnx"),
-                model_file: String::from("model.onnx"),
+                orig_repo: "sentence-transformers/all-MiniLM-L6-v2",
+                repository: "Qdrant/all-MiniLM-L6-v2-onnx",
+                model_files: vec!["model.onnx"],
                 dimenssions: 384,
             },
+            HuggingFaceModel::ParaphraseMLMiniLML12V2 => HuggingFaceModelInfo {
+                orig_repo: "sentence-transformers/paraphrase-MiniLM-L12-v2",
+                repository: "Xenova/paraphrase-multilingual-MiniLM-L12-v2",
+                model_files: vec!["onnx/model.onnx"],
+                dimenssions: 384,
+            },
+            HuggingFaceModel::ParaphraseMLMpnetBaseV2 => HuggingFaceModelInfo {
+                orig_repo: "sentence-transformers/paraphrase-multilingual-mpnet-base-v2",
+                repository: "Xenova/paraphrase-multilingual-mpnet-base-v2",
+                model_files: vec!["onnx/model.onnx"],
+                dimenssions: 768,
+            },
             HuggingFaceModel::BgeSmallEnV1_5 => HuggingFaceModelInfo {
-                orig_repo: todo!(),
-                repository: todo!(),
-                model_file: todo!(),
-                dimenssions: todo!(),
+                orig_repo: "BAAI/bge-small-en-v1.5",
+                repository: "Xenova/bge-small-en-v1.5",
+                model_files: vec!["onnx/model.onnx"],
+                dimenssions: 384,
             },
             HuggingFaceModel::BgeBaseEnV1_5 => HuggingFaceModelInfo {
-                orig_repo: todo!(),
-                repository: todo!(),
-                model_file: todo!(),
-                dimenssions: todo!(),
+                orig_repo: "BAAI/bge-base-en-v1.5",
+                repository: "Xenova/bge-base-en-v1.5",
+                model_files: vec!["onnx/model.onnx"],
+                dimenssions: 768,
+            },
+            HuggingFaceModel::BgeLargeEnV1_5 => HuggingFaceModelInfo {
+                orig_repo: "BAAI/bge-large-en-v1.5",
+                repository: "Xenova/bge-large-en-v1.5",
+                model_files: vec!["onnx/model.onnx"],
+                dimenssions: 1024,
+            },
+            HuggingFaceModel::BgeM3 => HuggingFaceModelInfo {
+                orig_repo: "BAAI/bge-m3",
+                repository: "BAAI/bge-m3",
+                model_files: vec!["onnx/model.onnx", "onnx/model.onnx_data"],
+                dimenssions: 1024,
+            },
+            HuggingFaceModel::NomicEmbedTextV1_5 => HuggingFaceModelInfo {
+                orig_repo: "nomic-ai/nomic-embed-text-v1.5",
+                repository: "nomic-ai/nomic-embed-text-v1.5",
+                model_files: vec!["onnx/model.onnx"],
+                dimenssions: 768,
+            },
+            HuggingFaceModel::MultilingualE5Small => HuggingFaceModelInfo {
+                orig_repo: "intfloat/multilingual-e5-small",
+                repository: "intfloat/multilingual-e5-small",
+                model_files: vec!["onnx/model.onnx"],
+                dimenssions: 384,
+            },
+            HuggingFaceModel::MultilingualE5Base => HuggingFaceModelInfo {
+                orig_repo: "intfloat/multilingual-e5-base",
+                repository: "intfloat/multilingual-e5-base",
+                model_files: vec!["onnx/model.onnx"],
+                dimenssions: 768,
+            },
+            HuggingFaceModel::MultilingualE5Large => HuggingFaceModelInfo {
+                orig_repo: "intfloat/multilingual-e5-large",
+                repository: "Qdrant/multilingual-e5-large-onnx",
+                model_files: vec!["model.onnx"],
+                dimenssions: 1024,
+            },
+            HuggingFaceModel::MxbaiEmbedLargeV1 => HuggingFaceModelInfo {
+                orig_repo: "mixedbread-ai/mxbai-embed-large-v1",
+                repository: "mixedbread-ai/mxbai-embed-large-v1",
+                model_files: vec!["onnx/model.onnx"],
+                dimenssions: 1024,
             },
         }
     }
@@ -131,13 +194,13 @@ pub(crate) async fn download_hf_models(info: &HuggingFaceModelInfo) -> Result<()
         }
     }
     let client = builder.build()?;
-    let files = vec![
-        &info.model_file,
+    let mut files = vec![
         "tokenizer.json",
         "config.json",
         "special_tokens_map.json",
         "tokenizer_config.json",
     ];
+    files.extend_from_slice(&info.model_files);
     for &f in files.iter() {
         let file_path_str = format!("{}/{}", &root_path, f);
         let file_path = std::path::Path::new(&file_path_str);
@@ -151,13 +214,12 @@ pub(crate) async fn download_hf_models(info: &HuggingFaceModelInfo) -> Result<()
         if let Some(s) = DOWNLOAD_STATUS.get() {
             if let Ok(mut v) = s.lock() {
                 v.downloading = true;
-                v.url = u.clone();
+                v.url = String::from(f);
             }
         }
         let res = client.get(&u).query(&[("download", "true")]).send().await?;
-        println!("22222222");
         let total_size = res.content_length().unwrap();
-        println!("Downloading {f}, total size {total_size}");
+        // println!("Downloading {f}, total size {total_size}");
         if let Some(s) = DOWNLOAD_STATUS.get() {
             if let Ok(mut v) = s.lock() {
                 v.total_len = total_size;
@@ -182,7 +244,7 @@ pub(crate) async fn download_hf_models(info: &HuggingFaceModelInfo) -> Result<()
             if let Some(s) = DOWNLOAD_STATUS.get() {
                 if let Ok(mut v) = s.lock() {
                     let new = std::cmp::min(v.downloaded_len + (chunk.len() as u64), total_size);
-                    log::info!("Downloaded {new}");
+                    // log::info!("Downloaded {new}");
                     v.downloaded_len = new;
                 }
             }
