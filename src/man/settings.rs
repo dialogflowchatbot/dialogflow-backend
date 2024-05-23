@@ -34,7 +34,6 @@ pub(crate) struct Settings {
     pub(crate) select_random_port_when_conflict: bool,
 }
 
-
 #[test]
 fn deser() {
     let s = Settings {
@@ -42,17 +41,19 @@ fn deser() {
         port: 12715,
         max_session_duration_min: 60,
         embedding_provider: EmbeddingProvider {
-            provider: crate::intent::embedding::EmbeddingProvider::HuggingFace(crate::intent::embedding::HuggingFaceModel::AllMiniLML6V2),
+            provider: crate::intent::embedding::EmbeddingProvider::HuggingFace(
+                crate::intent::embedding::HuggingFaceModel::AllMiniLML6V2,
+            ),
             api_url: String::new(),
             api_key: String::new(),
-            model: String::new()
+            model: String::new(),
         },
         smtp_host: String::new(),
         smtp_username: String::new(),
         smtp_password: String::new(),
         smtp_timeout_sec: 30,
         email_verification_regex: String::new(),
-        select_random_port_when_conflict: false
+        select_random_port_when_conflict: false,
     };
     let j = serde_json::to_string(&s);
     assert!(j.is_ok());
@@ -63,7 +64,6 @@ fn deser() {
     let v: serde_json::Value = r.unwrap();
     assert_eq!(v["embeddingProvider"]["provider"], "HuggingFace");
 }
-
 
 #[derive(Deserialize, Serialize)]
 pub(crate) struct EmbeddingProvider {
@@ -168,6 +168,11 @@ pub(crate) async fn download_model_files() -> impl IntoResponse {
                 settings.embedding_provider.provider
             {
                 let r = crate::intent::embedding::download_hf_models(&m.get_info()).await;
+        if let Some(s) = crate::intent::embedding::DOWNLOAD_STATUS.get() {
+            if let Ok(mut v) = s.lock() {
+                v.downloading = false;
+            }
+        }                
                 return to_res(r);
             }
         }
@@ -188,7 +193,7 @@ pub(crate) async fn check_model_files() -> impl IntoResponse {
             if let crate::intent::embedding::EmbeddingProvider::HuggingFace(m) =
                 settings.embedding_provider.provider
             {
-                let r = match crate::intent::embedding::load_model(&m.get_info().repository) {
+                let r = match crate::intent::embedding::load_model(&m.get_info().orig_repo) {
                     Ok(_) => Ok(()),
                     Err(e) => {
                         let err = format!("Hugging face model files incorrect. Err: {:?}", &e);

@@ -43,7 +43,8 @@ pub(crate) enum HuggingFaceModel {
 }
 
 pub(crate) struct HuggingFaceModelInfo {
-    pub(crate) repository: String,
+    pub(crate) orig_repo: String,
+    repository: String,
     model_file: String,
     dimenssions: u32,
 }
@@ -52,16 +53,19 @@ impl HuggingFaceModel {
     pub(crate) fn get_info(&self) -> HuggingFaceModelInfo {
         match self {
             HuggingFaceModel::AllMiniLML6V2 => HuggingFaceModelInfo {
+                orig_repo: String::from("Qdrant/all-MiniLM-L6-v2-onnx"),
                 repository: String::from("Qdrant/all-MiniLM-L6-v2-onnx"),
                 model_file: String::from("model.onnx"),
                 dimenssions: 384,
             },
             HuggingFaceModel::BgeSmallEnV1_5 => HuggingFaceModelInfo {
+                orig_repo: todo!(),
                 repository: todo!(),
                 model_file: todo!(),
                 dimenssions: todo!(),
             },
             HuggingFaceModel::BgeBaseEnV1_5 => HuggingFaceModelInfo {
+                orig_repo: todo!(),
                 repository: todo!(),
                 model_file: todo!(),
                 dimenssions: todo!(),
@@ -74,17 +78,20 @@ const HUGGING_FACE_MODEL_ROOT: &str = "./data/hf_hub/";
 
 #[derive(Clone, Serialize)]
 pub(crate) struct DownloadStatus {
+    pub(crate) downloading: bool,
+    #[serde(rename = "totalLen")]
     pub(crate) total_len: u64,
+    #[serde(rename = "downloadedLen")]
     pub(crate) downloaded_len: u64,
     pub(crate) url: String,
 }
 
-static DOWNLOAD_STATUS: OnceLock<Mutex<Option<DownloadStatus>>> = OnceLock::new();
+pub(crate) static DOWNLOAD_STATUS: OnceLock<Mutex<DownloadStatus>> = OnceLock::new();
 
 pub(crate) fn get_download_status() -> Option<DownloadStatus> {
-    if let Some(l) = DOWNLOAD_STATUS.get() {
-        return match l.lock() {
-            Ok(s) => s.clone(),
+    if let Some(op) = DOWNLOAD_STATUS.get() {
+        return match op.lock() {
+            Ok(s) => Some(s.clone()),
             Err(e) => {
                 log::error!("{:?}", &e);
                 None
@@ -95,15 +102,33 @@ pub(crate) fn get_download_status() -> Option<DownloadStatus> {
 }
 
 pub(crate) async fn download_hf_models(info: &HuggingFaceModelInfo) -> Result<()> {
-    let root_path = format!("{}{}", HUGGING_FACE_MODEL_ROOT, info.repository);
+    if let Ok(v) = DOWNLOAD_STATUS
+        .get_or_init(|| {
+            Mutex::new(DownloadStatus {
+                downloading: false,
+                total_len: 1,
+                downloaded_len: 0,
+                url: String::new(),
+            })
+        })
+        .lock()
+    {
+        if v.downloading {
+            return Err(Error::ErrorWithMessage(String::from(
+                "Model files are downloading.",
+            )));
+        }
+    }
+    let root_path = format!("{}{}", HUGGING_FACE_MODEL_ROOT, info.orig_repo);
     tokio::fs::create_dir_all(&root_path).await?;
     let mut builder = reqwest::Client::builder()
         .connect_timeout(Duration::from_millis(5000))
         .read_timeout(Duration::from_millis(10000));
-    let proxy = std::env::var("https_proxy")?;
-    if !proxy.is_empty() {
-        log::info!("Detected proxy setting: {}", &proxy);
-        builder = builder.proxy(reqwest::Proxy::https(&proxy)?)
+    if let Ok(proxy) = std::env::var("https_proxy") {
+        if !proxy.is_empty() {
+            log::info!("Detected proxy setting: {}", &proxy);
+            builder = builder.proxy(reqwest::Proxy::https(&proxy)?)
+        }
     }
     let client = builder.build()?;
     let files = vec![
@@ -123,9 +148,21 @@ pub(crate) async fn download_hf_models(info: &HuggingFaceModelInfo) -> Result<()
             "https://huggingface.co/{}/resolve/main/{}",
             &info.repository, f
         );
+        if let Some(s) = DOWNLOAD_STATUS.get() {
+            if let Ok(mut v) = s.lock() {
+                v.downloading = true;
+                v.url = u.clone();
+            }
+        }
         let res = client.get(&u).query(&[("download", "true")]).send().await?;
+        println!("22222222");
         let total_size = res.content_length().unwrap();
         println!("Downloading {f}, total size {total_size}");
+        if let Some(s) = DOWNLOAD_STATUS.get() {
+            if let Ok(mut v) = s.lock() {
+                v.total_len = total_size;
+            }
+        }
         // let b = res.bytes().await?;
         // fs::write("./temp.file", b.as_ref()).await?;
         // let mut downloaded = 0u64;
@@ -134,32 +171,20 @@ pub(crate) async fn download_hf_models(info: &HuggingFaceModelInfo) -> Result<()
             .read(false)
             .write(true)
             .truncate(false)
-            .create(false)
+            .create_new(true)
             .open(file_path)
             .await?;
         // let mut file = File::create("./temp.file").await?;
-        let locker = DOWNLOAD_STATUS.get_or_init(|| {
-            Mutex::new(Some(DownloadStatus {
-                total_len: total_size,
-                downloaded_len: 0,
-                url: u,
-            }))
-        });
 
         while let Some(item) = stream.next().await {
             let chunk = item?;
             file.write_all(&chunk).await?;
-            match locker.lock() {
-                Ok(mut op) => match op.as_mut() {
-                    Some(v) => {
-                        let new =
-                            std::cmp::min(v.downloaded_len + (chunk.len() as u64), total_size);
-                        log::info!("Downloaded {new}");
-                        v.downloaded_len = new;
-                    }
-                    None => log::warn!("DownloadStatus was not found."),
-                },
-                Err(e) => log::warn!("{:?}", &e),
+            if let Some(s) = DOWNLOAD_STATUS.get() {
+                if let Ok(mut v) = s.lock() {
+                    let new = std::cmp::min(v.downloaded_len + (chunk.len() as u64), total_size);
+                    log::info!("Downloaded {new}");
+                    v.downloaded_len = new;
+                }
             }
         }
     }
@@ -208,7 +233,7 @@ pub(crate) fn load_model(repository: &str) -> Result<fastembed::TextEmbedding> {
 
 fn hugging_face(info: &HuggingFaceModelInfo, s: &str) -> Result<Vec<f32>> {
     let model = EMBEDDING_MODEL.get_or_init(|| {
-        match load_model(&info.repository) {
+        match load_model(&info.orig_repo) {
             Ok(m) => Some(m),
             Err(e) => {
                 log::error!("Failed read model files err: {:?}, ", e);
