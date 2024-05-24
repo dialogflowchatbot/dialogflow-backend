@@ -73,6 +73,7 @@ fn check_first_node(
                     Node::GotoNode(n) => n.node_id = String::from(first_node_id),
                     Node::ExternalHttpNode(n) => n.node_id = String::from(first_node_id),
                     Node::SendEmailNode(n) => n.node_id = String::from(first_node_id),
+                    Node::EndNode(n) => n.node_id = String::from(first_node_id),
                 };
             }
         }
@@ -236,38 +237,6 @@ fn convert_node(main_flow_id: &str, node: &mut Node) -> Result<()> {
             // bytes.push(RuntimeNodeTypeId::CollectNode as u8);
             nodes.push((n.node_id.clone(), bytes));
         }
-        Node::GotoNode(n) => {
-            // println!("GotoNode {}", &n.node_id);
-            match n.goto_type {
-                NextActionType::Terminate => {
-                    let node = TerminateNode {};
-                    let r = RuntimeNnodeEnum::TerminateNode(node);
-                    let bytes = rkyv::to_bytes::<_, 64>(&r).unwrap();
-                    // bytes.push(RuntimeNodeTypeId::TerminateNode as u8);
-                    nodes.push((n.node_id.clone(), bytes));
-                }
-                NextActionType::GotoMainFlow => {
-                    let node = GotoMainFlowNode {
-                        main_flow_id: n.goto_mainflow_id.clone(),
-                        next_node_id: n.goto_subflow_id.clone(),
-                    };
-                    let r = RuntimeNnodeEnum::GotoMainFlowNode(node);
-                    let bytes = rkyv::to_bytes::<_, 64>(&r).unwrap();
-                    nodes.push((n.node_id.clone(), bytes));
-                }
-                NextActionType::GotoSubFlow => {
-                    let node = GotoAnotherNode {
-                        next_node_id: n.goto_subflow_id.clone(),
-                    };
-                    let r = RuntimeNnodeEnum::GotoAnotherNode(node);
-                    let bytes = rkyv::to_bytes::<_, 64>(&r).unwrap();
-                    // bytes.push(RuntimeNodeTypeId::GotoAnotherNode as u8);
-                    nodes.push((n.node_id.clone(), bytes));
-                }
-                NextActionType::GotoExternalLink => {}
-                _ => {}
-            }
-        }
         Node::ExternalHttpNode(n) => {
             let node = ExternalHttpCallNode {
                 next_node_id: n.branches[0].target_node_id.clone(),
@@ -307,6 +276,49 @@ fn convert_node(main_flow_id: &str, node: &mut Node) -> Result<()> {
             let bytes = rkyv::to_bytes::<_, 128>(&r).unwrap();
             // bytes.push(RuntimeNodeTypeId::CollectNode as u8);
             nodes.push((n.node_id.clone(), bytes));
+        }
+        Node::GotoNode(n) => {
+            // println!("GotoNode {}", &n.node_id);
+            match n.goto_type {
+                NextActionType::GotoMainFlow => {
+                    let node = GotoMainFlowNode {
+                        main_flow_id: n.goto_mainflow_id.clone(),
+                        next_node_id: n.goto_subflow_id.clone(),
+                    };
+                    let r = RuntimeNnodeEnum::GotoMainFlowNode(node);
+                    let bytes = rkyv::to_bytes::<_, 64>(&r).unwrap();
+                    nodes.push((n.node_id.clone(), bytes));
+                }
+                NextActionType::GotoSubFlow => {
+                    let node = GotoAnotherNode {
+                        next_node_id: n.goto_subflow_id.clone(),
+                    };
+                    let r = RuntimeNnodeEnum::GotoAnotherNode(node);
+                    let bytes = rkyv::to_bytes::<_, 64>(&r).unwrap();
+                    // bytes.push(RuntimeNodeTypeId::GotoAnotherNode as u8);
+                    nodes.push((n.node_id.clone(), bytes));
+                }
+                NextActionType::GotoExternalLink => {}
+                _ => {}
+            }
+        }
+        Node::EndNode(n) => {
+            // println!("GotoNode {}", &n.node_id);
+            let node = TerminateNode {};
+            let r = RuntimeNnodeEnum::TerminateNode(node);
+            let bytes = rkyv::to_bytes::<_, 64>(&r).unwrap();
+            let end_node_id = format!("{}-2", &n.node_id);
+            nodes.push((end_node_id.clone(), bytes));
+            if !n.ending_text.is_empty() {
+                let node = TextNode {
+                    text: n.ending_text.clone(),
+                    ret: false,
+                    next_node_id: end_node_id,
+                };
+                let r = RuntimeNnodeEnum::TextNode(node);
+                let bytes = rkyv::to_bytes::<_, 256>(&r).unwrap();
+                nodes.push((n.node_id.clone(), bytes));
+            }
         }
     };
     // let mut nodes: Vec<(&str, &[u8])> = Vec::with_capacity(box_nodes.len());

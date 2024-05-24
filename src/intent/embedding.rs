@@ -33,7 +33,7 @@ pub(super) async fn embedding(s: &str) -> Result<Vec<f32>> {
     }
 }
 
-static EMBEDDING_MODEL: OnceLock<Option<fastembed::TextEmbedding>> = OnceLock::new();
+static EMBEDDING_MODEL: OnceLock<Mutex<Option<fastembed::TextEmbedding>>> = OnceLock::new();
 
 #[derive(Deserialize, Serialize)]
 pub(crate) enum HuggingFaceModel {
@@ -253,7 +253,7 @@ pub(crate) async fn download_hf_models(info: &HuggingFaceModelInfo) -> Result<()
     Ok(())
 }
 
-pub(crate) fn load_model(repository: &str) -> Result<fastembed::TextEmbedding> {
+pub(crate) fn load_model_files(repository: &str) -> Result<fastembed::TextEmbedding> {
     let model_files = [
         "model.onnx",
         "tokenizer.json",
@@ -293,33 +293,36 @@ pub(crate) fn load_model(repository: &str) -> Result<fastembed::TextEmbedding> {
     Ok(r)
 }
 
-fn hugging_face(info: &HuggingFaceModelInfo, s: &str) -> Result<Vec<f32>> {
-    let model = EMBEDDING_MODEL.get_or_init(|| {
-        match load_model(&info.orig_repo) {
-            Ok(m) => Some(m),
-            Err(e) => {
-                log::error!("Failed read model files err: {:?}, ", e);
-                None
-            }
+pub(crate) fn replace_model_cache(c: fastembed::TextEmbedding) {
+    if let Some(lock) = EMBEDDING_MODEL.get() {
+        if let Ok(mut cache) = lock.lock() {
+            cache.replace(c);
         }
-        // if let Ok(model) = load_model(&info.repository) {
-        //     Some(model)
-        // } else {
-        //     None
-        // }
-    });
-    if let Some(m) = model {
-        let mut embeddings = m.embed(vec![s], None)?;
-        if embeddings.is_empty() {
-            return Err(Error::ErrorWithMessage(String::from(
-                "Embedding data was empty.",
-            )));
-        }
-        return Ok(embeddings.remove(0));
     }
-    Err(Error::ErrorWithMessage(String::from(
-        "Hugging Face model files can NOT be found.",
-    )))
+}
+
+fn hugging_face(info: &HuggingFaceModelInfo, s: &str) -> Result<Vec<f32>> {
+    let lock = EMBEDDING_MODEL.get_or_init(|| Mutex::new(None));
+    let mut model = match lock.lock() {
+        Ok(l) => l,
+        Err(e) => {
+            log::warn!("{:#?}", &e);
+            e.into_inner()
+        }
+    };
+    let m = if model.is_none() {
+        let loaded_model = load_model_files(&info.orig_repo)?;
+        model.insert(loaded_model)
+    } else {
+        model.as_ref().unwrap()
+    };
+    let mut embeddings = m.embed(vec![s], None)?;
+    if embeddings.is_empty() {
+        return Err(Error::ErrorWithMessage(String::from(
+            "Embedding data was empty.",
+        )));
+    }
+    return Ok(embeddings.remove(0));
 }
 
 async fn open_ai(m: &str, s: &str) -> Result<Vec<f32>> {

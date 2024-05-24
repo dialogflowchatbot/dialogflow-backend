@@ -59,6 +59,7 @@ pub(crate) enum Node {
     GotoNode(GotoNode),
     ExternalHttpNode(ExternalHttpNode),
     SendEmailNode(SendEmailNode),
+    EndNode(EndNode),
 }
 
 impl Node {
@@ -184,6 +185,18 @@ impl Node {
                     }
                 }
             }
+            Node::EndNode(n) => {
+                let t = "End email";
+                if !n.valid {
+                    Self::err(f, t, &n.node_name, "verification failed")
+                } else if n.node_name.is_empty() {
+                    Self::err(f, t, &n.node_name, "node name not filled in")
+                } else if n.ending_text.len() > 10000 {
+                    Self::err(f, t, &n.node_name, "ending text were too long")
+                } else {
+                    Ok(())
+                }
+            }
         }
     }
 
@@ -195,6 +208,7 @@ impl Node {
             Self::GotoNode(n) => n.node_id.clone(),
             Self::ExternalHttpNode(n) => n.node_id.clone(),
             Self::SendEmailNode(n) => n.node_id.clone(),
+            Self::EndNode(n) => n.node_id.clone(),
         }
     }
 
@@ -206,7 +220,7 @@ impl Node {
                     .iter()
                     .for_each(|b| ids.push(b.target_node_id.clone()));
             }
-            Self::GotoNode(_) => {}
+            Self::EndNode(_) | Self::GotoNode(_) => {}
             Self::ConditionNode(n) => {
                 n.branches
                     .iter()
@@ -234,7 +248,7 @@ impl Node {
     pub(crate) fn get_branches(&mut self) -> Option<&mut Vec<Branch>> {
         match self {
             Self::DialogNode(n) => Some(&mut n.branches),
-            Self::GotoNode(_) => None,
+            Self::EndNode(_) | Self::GotoNode(_) => None,
             Self::ConditionNode(n) => Some(&mut n.branches),
             Self::CollectNode(n) => Some(&mut n.branches),
             Self::ExternalHttpNode(n) => Some(&mut n.branches),
@@ -382,4 +396,15 @@ pub(crate) struct SendEmailNode {
     pub(crate) branches: Vec<Branch>,
     #[serde(rename = "asyncSend")]
     pub(crate) async_send: bool,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct EndNode {
+    pub(crate) valid: bool,
+    #[serde(rename = "nodeId")]
+    pub(crate) node_id: String,
+    #[serde(rename = "nodeName")]
+    pub(crate) node_name: String,
+    #[serde(rename = "endingText")]
+    pub(crate) ending_text: String,
 }

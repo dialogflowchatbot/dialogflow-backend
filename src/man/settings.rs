@@ -6,6 +6,7 @@ use axum::Json;
 use serde::{Deserialize, Serialize};
 
 use crate::db;
+use crate::intent::embedding;
 use crate::result::{Error, Result};
 use crate::web::server::{self, to_res};
 
@@ -136,6 +137,14 @@ pub(crate) fn save_settings(data: &Settings) -> Result<()> {
         log::error!("Saving invalid listen IP: {}", &addr);
         Error::ErrorWithMessage(String::from("lang.settings.invalidIp"))
     })?;
+    if let embedding::EmbeddingProvider::HuggingFace(m) = &data.embedding_provider.provider {
+        match crate::intent::embedding::load_model_files(&m.get_info().orig_repo) {
+            Ok(m) => embedding::replace_model_cache(m),
+            Err(e) => {
+                log::warn!("Hugging face model files incorrect. Err: {:?}", &e);
+            }
+        }
+    }
     db::write(TABLE, SETTINGS_KEY, &data)
 }
 
@@ -168,11 +177,11 @@ pub(crate) async fn download_model_files() -> impl IntoResponse {
                 settings.embedding_provider.provider
             {
                 let r = crate::intent::embedding::download_hf_models(&m.get_info()).await;
-        if let Some(s) = crate::intent::embedding::DOWNLOAD_STATUS.get() {
-            if let Ok(mut v) = s.lock() {
-                v.downloading = false;
-            }
-        }                
+                if let Some(s) = crate::intent::embedding::DOWNLOAD_STATUS.get() {
+                    if let Ok(mut v) = s.lock() {
+                        v.downloading = false;
+                    }
+                }
                 return to_res(r);
             }
         }
@@ -190,10 +199,10 @@ pub(crate) async fn download_model_progress() -> impl IntoResponse {
 pub(crate) async fn check_model_files() -> impl IntoResponse {
     if let Ok(op) = get_settings() {
         if let Some(settings) = op {
-            if let crate::intent::embedding::EmbeddingProvider::HuggingFace(m) =
-                settings.embedding_provider.provider
+            if let embedding::EmbeddingProvider::HuggingFace(m) =
+                &settings.embedding_provider.provider
             {
-                let r = match crate::intent::embedding::load_model(&m.get_info().orig_repo) {
+                let r = match embedding::load_model_files(&m.get_info().orig_repo) {
                     Ok(_) => Ok(()),
                     Err(e) => {
                         let err = format!("Hugging face model files incorrect. Err: {:?}", &e);
