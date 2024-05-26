@@ -214,7 +214,7 @@ fn gen_router() -> Router {
         .route("/flow/answer", post(rt::answer))
         .route("/version.json", get(version))
         .route("/check-new-version.json", get(check_new_version))
-        // .route("/o", get(flow::output))
+        .route("/o", get(subflow::output))
         .layer(
             CorsLayer::new()
                 .allow_origin(AllowOrigin::predicate(

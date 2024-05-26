@@ -141,7 +141,7 @@ pub(crate) async fn release(
     to_res(r)
 }
 
-// pub(crate) async fn output(Query(data): Query<SubFlowFormData>) -> impl IntoResponse {
-//     let flows: Option<Vec<SubFlowDetail>> = db::query(TABLE, data.main_flow_id.as_str()).unwrap();
-//     serde_json::to_string(&flows).unwrap()
-// }
+pub(crate) async fn output(Query(data): Query<SubFlowFormData>) -> impl IntoResponse {
+    let flows: Option<Vec<SubFlowDetail>> = db::query(TABLE, data.main_flow_id.as_str()).unwrap();
+    serde_json::to_string(&flows).unwrap()
+}

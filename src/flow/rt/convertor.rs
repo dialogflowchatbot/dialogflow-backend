@@ -117,16 +117,18 @@ fn convert_subflow(mainflow_id: &str, flow_idx: usize, f: &SubFlowDetail) -> Res
             if let Some(branches) = node.get_branches() {
                 for branch in branches.iter_mut() {
                     if branch.branch_id.is_empty() {
-                        return Err(Error::ErrorWithMessage(String::from(
-                            "Branch id information not found",
+                        return Err(Error::ErrorWithMessage(format!(
+                            "Branch '{}' of '{}' id information not found",
+                            branch.branch_name, f.name
                         )));
                     }
                     let target_node_id = branches_link.remove(branch.branch_id.as_str());
                     if let Some(t) = target_node_id {
                         branch.target_node_id = t;
                     } else {
-                        return Err(Error::ErrorWithMessage(String::from(
-                            "Branch id information not found",
+                        return Err(Error::ErrorWithMessage(format!(
+                            "Branch '{}' of '{}' id information not found",
+                            branch.branch_name, f.name
                         )));
                     }
                 }

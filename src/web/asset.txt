@@ -1,6 +1,6 @@
 [
-(include_bytes!(r#"..\resources\assets/assets\index-Cb6_iPA-.css.gz"#), "text/css"),
-(include_bytes!(r#"..\resources\assets/assets\index-D0EGhxTc.js.gz"#), "text/javascript"),
+(include_bytes!(r#"..\resources\assets/assets\index-dbfrgCNZ.js.gz"#), "text/javascript"),
+(include_bytes!(r#"..\resources\assets/assets\index-X6IkoCLM.css.gz"#), "text/css"),
 (include_bytes!(r#"..\resources\assets/favicon.ico.gz"#), "image/x-icon"),
 (include_bytes!(r#"..\resources\assets/index.html.gz"#), "text/html; charset=utf-8"),
 ]
