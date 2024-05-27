@@ -31,7 +31,7 @@ itoa = "1.0"
 # lancedb = "0.4"
 oasysdb = "0.5"
 once_cell = "1.19"
-ort = { version = "=2.0.0-rc.0", default-features = false }
+ort = { version = "=2.0.0-rc.2", default-features = false }
 redb = "2.1"
 regex = "1.10"
 reqwest = { version = "0.12", features = ["stream"] }
