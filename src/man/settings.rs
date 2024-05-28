@@ -138,7 +138,7 @@ pub(crate) fn save_settings(data: &Settings) -> Result<()> {
         Error::ErrorWithMessage(String::from("lang.settings.invalidIp"))
     })?;
     if let embedding::EmbeddingProvider::HuggingFace(m) = &data.embedding_provider.provider {
-        match crate::intent::embedding::load_model_files(&m.get_info().orig_repo) {
+        match crate::intent::embedding::load_model_files(&m.get_info().repository) {
             Ok(m) => embedding::replace_model_cache(m),
             Err(e) => {
                 log::warn!("Hugging face model files incorrect. Err: {:?}", &e);
@@ -202,7 +202,7 @@ pub(crate) async fn check_model_files() -> impl IntoResponse {
             if let embedding::EmbeddingProvider::HuggingFace(m) =
                 &settings.embedding_provider.provider
             {
-                let r = match embedding::load_model_files(&m.get_info().orig_repo) {
+                let r = match embedding::load_model_files(&m.get_info().repository) {
                     Ok(_) => Ok(()),
                     Err(e) => {
                         let err = format!("Hugging face model files incorrect. Err: {:?}", &e);

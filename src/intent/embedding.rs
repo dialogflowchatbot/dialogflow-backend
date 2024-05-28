@@ -4,9 +4,13 @@ use std::collections::VecDeque;
 use std::sync::{Mutex, OnceLock};
 use std::vec::Vec;
 
+use candle::{Device, IndexOp, Tensor};
+use candle_nn::VarBuilder;
+use candle_transformers::models::bert::{BertModel, Config, HiddenAct, DTYPE};
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
+use tokenizers::{AddedToken, PaddingParams, PaddingStrategy, Tokenizer, TruncationParams};
 use tokio::fs::OpenOptions;
 use tokio::io::AsyncWriteExt;
 
@@ -33,7 +37,7 @@ pub(super) async fn embedding(s: &str) -> Result<Vec<f32>> {
     }
 }
 
-static EMBEDDING_MODEL: OnceLock<Mutex<Option<fastembed::TextEmbedding>>> = OnceLock::new();
+static EMBEDDING_MODEL: OnceLock<Mutex<Option<(BertModel, Tokenizer)>>> = OnceLock::new();
 
 #[derive(Deserialize, Serialize)]
 pub(crate) enum HuggingFaceModel {
@@ -52,8 +56,8 @@ pub(crate) enum HuggingFaceModel {
 }
 
 pub(crate) struct HuggingFaceModelInfo {
-    pub(crate) orig_repo: &'static str,
-    repository: &'static str,
+    pub(crate) repository: &'static str,
+    mirror: &'static str,
     model_files: Vec<&'static str>,
     dimenssions: u32,
 }
@@ -62,75 +66,75 @@ impl HuggingFaceModel {
     pub(crate) fn get_info(&self) -> HuggingFaceModelInfo {
         match self {
             HuggingFaceModel::AllMiniLML6V2 => HuggingFaceModelInfo {
-                orig_repo: "sentence-transformers/all-MiniLM-L6-v2",
-                repository: "Qdrant/all-MiniLM-L6-v2-onnx",
-                model_files: vec!["model.onnx"],
+                repository: "sentence-transformers/all-MiniLM-L6-v2",
+                mirror: "sentence-transformers/all-MiniLM-L6-v2",
+                model_files: vec!["model.safetensors"],
                 dimenssions: 384,
             },
             HuggingFaceModel::ParaphraseMLMiniLML12V2 => HuggingFaceModelInfo {
-                orig_repo: "sentence-transformers/paraphrase-MiniLM-L12-v2",
-                repository: "Xenova/paraphrase-multilingual-MiniLM-L12-v2",
-                model_files: vec!["onnx/model.onnx"],
+                repository: "sentence-transformers/paraphrase-MiniLM-L12-v2",
+                mirror: "sentence-transformers/paraphrase-MiniLM-L12-v2",
+                model_files: vec!["model.safetensors"],
                 dimenssions: 384,
             },
             HuggingFaceModel::ParaphraseMLMpnetBaseV2 => HuggingFaceModelInfo {
-                orig_repo: "sentence-transformers/paraphrase-multilingual-mpnet-base-v2",
-                repository: "Xenova/paraphrase-multilingual-mpnet-base-v2",
-                model_files: vec!["onnx/model.onnx"],
+                repository: "sentence-transformers/paraphrase-multilingual-mpnet-base-v2",
+                mirror: "sentence-transformers/paraphrase-multilingual-mpnet-base-v2",
+                model_files: vec!["model.safetensors"],
                 dimenssions: 768,
             },
             HuggingFaceModel::BgeSmallEnV1_5 => HuggingFaceModelInfo {
-                orig_repo: "BAAI/bge-small-en-v1.5",
-                repository: "Xenova/bge-small-en-v1.5",
-                model_files: vec!["onnx/model.onnx"],
+                repository: "BAAI/bge-small-en-v1.5",
+                mirror: "BAAI/bge-small-en-v1.5",
+                model_files: vec!["model.safetensors"],
                 dimenssions: 384,
             },
             HuggingFaceModel::BgeBaseEnV1_5 => HuggingFaceModelInfo {
-                orig_repo: "BAAI/bge-base-en-v1.5",
-                repository: "Xenova/bge-base-en-v1.5",
-                model_files: vec!["onnx/model.onnx"],
+                repository: "BAAI/bge-base-en-v1.5",
+                mirror: "BAAI/bge-base-en-v1.5",
+                model_files: vec!["model.safetensors"],
                 dimenssions: 768,
             },
             HuggingFaceModel::BgeLargeEnV1_5 => HuggingFaceModelInfo {
-                orig_repo: "BAAI/bge-large-en-v1.5",
-                repository: "Xenova/bge-large-en-v1.5",
-                model_files: vec!["onnx/model.onnx"],
+                repository: "BAAI/bge-large-en-v1.5",
+                mirror: "BAAI/bge-large-en-v1.5",
+                model_files: vec!["model.safetensors"],
                 dimenssions: 1024,
             },
             HuggingFaceModel::BgeM3 => HuggingFaceModelInfo {
-                orig_repo: "BAAI/bge-m3",
                 repository: "BAAI/bge-m3",
+                mirror: "BAAI/bge-m3",
                 model_files: vec!["onnx/model.onnx", "onnx/model.onnx_data"],
                 dimenssions: 1024,
             },
             HuggingFaceModel::NomicEmbedTextV1_5 => HuggingFaceModelInfo {
-                orig_repo: "nomic-ai/nomic-embed-text-v1.5",
                 repository: "nomic-ai/nomic-embed-text-v1.5",
-                model_files: vec!["onnx/model.onnx"],
+                mirror: "nomic-ai/nomic-embed-text-v1.5",
+                model_files: vec!["model.safetensors"],
                 dimenssions: 768,
             },
             HuggingFaceModel::MultilingualE5Small => HuggingFaceModelInfo {
-                orig_repo: "intfloat/multilingual-e5-small",
                 repository: "intfloat/multilingual-e5-small",
-                model_files: vec!["onnx/model.onnx"],
+                mirror: "intfloat/multilingual-e5-small",
+                model_files: vec!["model.safetensors"],
                 dimenssions: 384,
             },
             HuggingFaceModel::MultilingualE5Base => HuggingFaceModelInfo {
-                orig_repo: "intfloat/multilingual-e5-base",
                 repository: "intfloat/multilingual-e5-base",
-                model_files: vec!["onnx/model.onnx"],
+                mirror: "intfloat/multilingual-e5-base",
+                model_files: vec!["model.safetensors"],
                 dimenssions: 768,
             },
             HuggingFaceModel::MultilingualE5Large => HuggingFaceModelInfo {
-                orig_repo: "intfloat/multilingual-e5-large",
-                repository: "Qdrant/multilingual-e5-large-onnx",
-                model_files: vec!["model.onnx"],
+                repository: "intfloat/multilingual-e5-large",
+                mirror: "intfloat/multilingual-e5-large",
+                model_files: vec!["model.safetensors"],
                 dimenssions: 1024,
             },
             HuggingFaceModel::MxbaiEmbedLargeV1 => HuggingFaceModelInfo {
-                orig_repo: "mixedbread-ai/mxbai-embed-large-v1",
                 repository: "mixedbread-ai/mxbai-embed-large-v1",
-                model_files: vec!["onnx/model.onnx"],
+                mirror: "mixedbread-ai/mxbai-embed-large-v1",
+                model_files: vec!["model.safetensors"],
                 dimenssions: 1024,
             },
         }
@@ -182,7 +186,7 @@ pub(crate) async fn download_hf_models(info: &HuggingFaceModelInfo) -> Result<()
             )));
         }
     }
-    let root_path = format!("{}{}", HUGGING_FACE_MODEL_ROOT, info.orig_repo);
+    let root_path = format!("{}{}", HUGGING_FACE_MODEL_ROOT, info.repository);
     tokio::fs::create_dir_all(&root_path).await?;
     let mut builder = reqwest::Client::builder()
         .connect_timeout(Duration::from_millis(5000))
@@ -207,10 +211,7 @@ pub(crate) async fn download_hf_models(info: &HuggingFaceModelInfo) -> Result<()
         if tokio::fs::try_exists(file_path).await? {
             continue;
         }
-        let u = format!(
-            "https://huggingface.co/{}/resolve/main/{}",
-            &info.repository, f
-        );
+        let u = format!("https://huggingface.co/{}/resolve/main/{}", &info.mirror, f);
         if let Some(s) = DOWNLOAD_STATUS.get() {
             if let Ok(mut v) = s.lock() {
                 v.downloading = true;
@@ -253,47 +254,105 @@ pub(crate) async fn download_hf_models(info: &HuggingFaceModelInfo) -> Result<()
     Ok(())
 }
 
-pub(crate) fn load_model_files(repository: &str) -> Result<fastembed::TextEmbedding> {
-    let model_files = [
-        "model.onnx",
-        "tokenizer.json",
-        "config.json",
-        "special_tokens_map.json",
-        "tokenizer_config.json",
-    ];
-    let mut model_file_streams = VecDeque::with_capacity(model_files.len());
-    for &f in model_files.iter() {
-        let file_path = format!("{}{}/{}", HUGGING_FACE_MODEL_ROOT, repository, f);
-        let stream = std::fs::read(&file_path)?;
-        model_file_streams.push_back(stream);
-        // match std::fs::read(&file_path) {
-        //     Ok(s) => model_file_streams.push_back(s),
-        //     Err(e) => {
-        //         log::warn!("Failed read model file {f}, err: {}, ", e);
-        //         return None;
-        //     }
-        // };
+fn device() -> Result<Device> {
+    if candle::utils::cuda_is_available() {
+        Ok(Device::new_cuda(0)?)
+    } else if candle::utils::metal_is_available() {
+        Ok(Device::new_metal(0)?)
+    } else {
+        Ok(Device::Cpu)
     }
-    let config = fastembed::UserDefinedEmbeddingModel {
-        onnx_file: model_file_streams.pop_front().unwrap(),
-        tokenizer_files: fastembed::TokenizerFiles {
-            tokenizer_file: model_file_streams.pop_front().unwrap(),
-            config_file: model_file_streams.pop_front().unwrap(),
-            special_tokens_map_file: model_file_streams.pop_front().unwrap(),
-            tokenizer_config_file: model_file_streams.pop_front().unwrap(),
-        },
-    };
-    let opt: fastembed::InitOptionsUserDefined = fastembed::InitOptionsUserDefined {
-        execution_providers: vec![fastembed::ExecutionProviderDispatch::CPU(
-            ort::CPUExecutionProvider::default(),
-        )],
-        max_length: 512,
-    };
-    let r = fastembed::TextEmbedding::try_new_from_user_defined(config, opt)?;
-    Ok(r)
 }
 
-pub(crate) fn replace_model_cache(c: fastembed::TextEmbedding) {
+fn construct_model_file_path(mirror: &str, f: &str) -> String {
+    format!("{}{}/{}", HUGGING_FACE_MODEL_ROOT, mirror, f)
+}
+
+// type TokenizerImpl = tokenizers::TokenizerImpl<
+//     tokenizers::ModelWrapper,
+//     tokenizers::NormalizerWrapper,
+//     tokenizers::PreTokenizerWrapper,
+//     tokenizers::PostProcessorWrapper,
+//     tokenizers::DecoderWrapper,
+// >;
+
+pub(crate) fn load_model_files(mirror: &str) -> Result<(BertModel, Tokenizer)> {
+    let f = construct_model_file_path(mirror, "config.json");
+    let config = std::fs::read_to_string(&f)?;
+    let config: serde_json::Value = serde_json::from_str(&config)?;
+    let pad_token_id = config["pad_token_id"].as_u64().unwrap_or(0) as u32;
+    let config: Config = serde_json::from_value(config)?;
+    let f = construct_model_file_path(mirror, "tokenizer.json");
+    let mut tokenizer = match Tokenizer::from_file(&f) {
+        Ok(t) => t,
+        Err(e) => return Err(Error::ErrorWithMessage(format!("{}", &e))),
+    };
+    // tokenizer config
+    let f = construct_model_file_path(mirror, "tokenizer_config.json");
+    let j: serde_json::Value = serde_json::from_slice(std::fs::read(&f)?.as_slice())?;
+    let model_max_length = j["model_max_length"]
+        .as_f64()
+        .expect("Error reading model_max_length from tokenizer_config.json")
+        as f32;
+    let max_length = 3096.min(model_max_length as usize);
+    let pad_token = j["pad_token"]
+        .as_str()
+        .expect("Error reading pad_token from tokenier_config.json")
+        .into();
+    // log::info!("p1 {}", tokenizer.get_padding().unwrap().pad_token);
+    // log::info!("t1 {}", tokenizer.get_truncation().unwrap().max_length);
+    let mut tokenizer = match tokenizer
+        .with_padding(Some(PaddingParams {
+            strategy: PaddingStrategy::BatchLongest,
+            pad_token,
+            pad_id: pad_token_id,
+            ..Default::default()
+        }))
+        .with_truncation(Some(TruncationParams {
+            max_length,
+            ..Default::default()
+        })) {
+        Ok(t) => t.clone().into(),
+        Err(e) => {
+            log::warn!("{:?}", &e);
+            tokenizer
+        }
+    };
+    // log::info!("p2 {}", tokenizer.get_padding().unwrap().pad_token);
+    // log::info!("t2 {}", tokenizer.get_truncation().unwrap().max_length);
+    // end
+    //
+    let f = construct_model_file_path(mirror, "special_tokens_map.json");
+    if let serde_json::Value::Object(root_object) =
+        serde_json::from_slice(std::fs::read(&f)?.as_slice())?
+    {
+        for (_, value) in root_object.iter() {
+            if value.is_string() {
+                tokenizer.add_special_tokens(&[AddedToken {
+                    content: value.as_str().unwrap().into(),
+                    special: true,
+                    ..Default::default()
+                }]);
+            } else if value.is_object() {
+                tokenizer.add_special_tokens(&[AddedToken {
+                    content: value["content"].as_str().unwrap().into(),
+                    special: true,
+                    single_word: value["single_word"].as_bool().unwrap(),
+                    lstrip: value["lstrip"].as_bool().unwrap(),
+                    rstrip: value["rstrip"].as_bool().unwrap(),
+                    normalized: value["normalized"].as_bool().unwrap(),
+                }]);
+            }
+        }
+    }
+    // end
+    let f = construct_model_file_path(mirror, "model.safetensors");
+    let vb = unsafe { VarBuilder::from_mmaped_safetensors(&[&f], DTYPE, &device()?)? };
+    let model = BertModel::load(vb, &config)?;
+    Ok((model, tokenizer))
+}
+
+pub(crate) fn replace_model_cache(c: (BertModel, Tokenizer)) {
     if let Some(lock) = EMBEDDING_MODEL.get() {
         if let Ok(mut cache) = lock.lock() {
             cache.replace(c);
@@ -303,26 +362,33 @@ pub(crate) fn replace_model_cache(c: fastembed::TextEmbedding) {
 
 fn hugging_face(info: &HuggingFaceModelInfo, s: &str) -> Result<Vec<f32>> {
     let lock = EMBEDDING_MODEL.get_or_init(|| Mutex::new(None));
-    let mut model = match lock.lock() {
-        Ok(l) => l,
-        Err(e) => {
-            log::warn!("{:#?}", &e);
-            e.into_inner()
-        }
-    };
-    let m = if model.is_none() {
-        let loaded_model = load_model_files(&info.orig_repo)?;
-        model.insert(loaded_model)
+    let mut model = lock.lock().unwrap_or_else(|e| {
+        log::warn!("{:#?}", &e);
+        e.into_inner()
+    });
+    let (m, ref mut t) = if model.is_none() {
+        let r = load_model_files(&info.repository)?;
+        model.insert(r)
     } else {
-        model.as_ref().unwrap()
+        model.as_mut().unwrap()
     };
-    let mut embeddings = m.embed(vec![s], None)?;
-    if embeddings.is_empty() {
-        return Err(Error::ErrorWithMessage(String::from(
-            "Embedding data was empty.",
-        )));
-    }
-    return Ok(embeddings.remove(0));
+    // let tokenizer = match t.with_padding(None).with_truncation(None) {
+    //     Ok(t) => t,
+    //     Err(e) => return Err(Error::ErrorWithMessage(format!("{}", &e))),
+    // };
+    let tokens = match t.encode(s, true) {
+        Ok(t) => t,
+        Err(e) => return Err(Error::ErrorWithMessage(format!("{}", &e))),
+    };
+    let tokens = tokens.get_ids().to_vec();
+    let token_ids = Tensor::new(&tokens[..], &m.device)?.unsqueeze(0)?;
+    let token_type_ids = token_ids.zeros_like()?;
+    let outputs = m.forward(&token_ids, &token_type_ids)?;
+    let (_n_sentence, n_tokens, _hidden_size) = outputs.dims3()?;
+    let embeddings = (outputs.sum(1)? / (n_tokens as f64))?;
+    // let embeddings = embeddings.broadcast_div(&embeddings.sqr()?.sum_keepdim(1)?.sqrt()?)?;
+    let r = embeddings.i(0)?.to_vec1::<f32>()?;
+    Ok(r)
 }
 
 async fn open_ai(m: &str, s: &str) -> Result<Vec<f32>> {

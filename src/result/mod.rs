@@ -140,3 +140,9 @@ impl From<std::env::VarError> for Error {
         Error::ErrorWithMessage(format!("{:?}", err))
     }
 }
+
+impl From<candle::Error> for Error {
+    fn from(err: candle::Error) -> Self {
+        Error::ErrorWithMessage(format!("{:?}", err))
+    }
+}

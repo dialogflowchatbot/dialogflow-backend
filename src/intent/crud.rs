@@ -273,7 +273,10 @@ pub(crate) async fn remove_regex(Json(params): Json<IntentFormData>) -> impl Int
     to_res(r)
 }
 
-pub(crate) async fn add_phrase(Json(params): Json<IntentFormData>) -> impl IntoResponse {
+pub(crate) async fn add_phrase(
+    Query(query): Query<IntentFormData>,
+    Json(params): Json<IntentFormData>,
+) -> impl IntoResponse {
     let key = params.id.as_str();
     let r: Result<Option<IntentDetail>> = db::query(TABLE, key);
     if r.is_err() {
@@ -291,10 +294,18 @@ pub(crate) async fn add_phrase(Json(params): Json<IntentFormData>) -> impl IntoR
         return to_res(r);
     }
     d.phrases.push(String::from(params.data.as_str()));
-    let idx = d.intent_idx;
-    let r = change_num(key, &mut d, |i: &mut Vec<Intent>| {
-        i[idx].phrase_num = i[idx].phrase_num + 1
-    });
+    let r = query
+        .data
+        .parse::<usize>()
+        .map_err(|e| {
+            log::error!("{:#?}", &e);
+            Error::ErrorWithMessage(String::from("Invalid idx parameter."))
+        })
+        .and_then(|idx| {
+            change_num(key, &mut d, |i: &mut Vec<Intent>| {
+                i[idx].phrase_num = i[idx].phrase_num + 1
+            })
+        });
     to_res(r)
 }
 
