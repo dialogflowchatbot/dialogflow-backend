@@ -83,7 +83,9 @@ impl Default for Settings {
             port: 12715,
             max_session_duration_min: 30,
             embedding_provider: EmbeddingProvider {
-                provider: crate::intent::embedding::EmbeddingProvider::OpenAI(String::new()),
+                provider: embedding::EmbeddingProvider::HuggingFace(
+                    embedding::HuggingFaceModel::AllMiniLML6V2,
+                ),
                 api_url: String::new(),
                 api_key: String::new(),
                 model: String::new(),

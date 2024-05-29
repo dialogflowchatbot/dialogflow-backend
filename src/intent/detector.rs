@@ -40,7 +40,9 @@ pub(crate) async fn detect(s: &str) -> Result<Option<String>> {
             let collection = match db.get_collection(&i.id) {
                 Ok(c) => c,
                 Err(e) => {
-                    log::warn!("Failed open collection {}", &e);
+                    if !is_col_not_found_err(&e) {
+                        log::warn!("Failed open collection {}", &e);
+                    }
                     continue;
                 }
             };
@@ -87,7 +89,7 @@ pub(crate) async fn save_intent_embedding(intent_id: &str, s: &str) -> Result<us
             }
         }
     };
-    log::info!("{:#?}", &embedding);
+    // log::info!("{:#?}", &embedding);
     let vector: Vector = embedding.into();
     let record: Record = Record::new(&vector, &"".into());
     let r = collection.insert(&record)?;
