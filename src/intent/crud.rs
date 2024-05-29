@@ -5,7 +5,7 @@ use axum::response::IntoResponse;
 use axum::Json;
 
 use super::detector;
-use super::dto::{Intent, IntentDetail, IntentFormData};
+use super::dto::{Intent, IntentDetail, IntentFormData, IntentPhraseData};
 use crate::db;
 use crate::result::{Error, Result};
 use crate::web::server::to_res;
@@ -149,14 +149,31 @@ fn add_intent(intent_name: &str) -> Result<()> {
 }
 
 pub(crate) async fn remove(Json(params): Json<IntentFormData>) -> impl IntoResponse {
-    let r = db::remove(TABLE, params.id.as_str());
-    if let Ok(idx) = params.data.parse() {
-        let mut intents: Vec<Intent> = db::query(TABLE, INTENT_LIST_KEY).unwrap().unwrap();
-        intents.remove(idx);
-        if let Err(e) = db::write(TABLE, INTENT_LIST_KEY, &intents) {
-            log::error!("Update intents list failed: {:?}", &e);
-        }
-    }
+    let r = detector::delete_all_embeddings(params.id.as_str()).and_then(|_| {
+        db::remove(TABLE, params.id.as_str()).and_then(|_| {
+            params
+                .data
+                .parse::<usize>()
+                .map_err(|e| {
+                    log::error!("{:?}", &e);
+                    Error::ErrorWithMessage(String::from("Invalid idx parameter."))
+                })
+                .and_then(|idx| {
+                    let mut intents: Vec<Intent> =
+                        db::query(TABLE, INTENT_LIST_KEY).unwrap().unwrap();
+                    intents.remove(idx);
+                    db::write(TABLE, INTENT_LIST_KEY, &intents)
+                })
+        })
+        // let r = db::remove(TABLE, params.id.as_str());
+        // if let Ok(idx) = params.data.parse() {
+        //     let mut intents: Vec<Intent> = db::query(TABLE, INTENT_LIST_KEY).unwrap().unwrap();
+        //     intents.remove(idx);
+        //     if let Err(e) = db::write(TABLE, INTENT_LIST_KEY, &intents) {
+        //         log::error!("Update intents list failed: {:?}", &e);
+        //     }
+        // }
+    });
     to_res(r)
 }
 
@@ -291,9 +308,12 @@ pub(crate) async fn add_phrase(
     let mut d = r.unwrap();
     let r = detector::save_intent_embedding(key, &params.data).await;
     if r.is_err() {
-        return to_res(r);
+        return to_res(r.map(|_| ()));
     }
-    d.phrases.push(String::from(params.data.as_str()));
+    d.phrases.push(IntentPhraseData {
+        id: r.unwrap(),
+        phrase: String::from(params.data.as_str()),
+    });
     let r = query
         .data
         .parse::<usize>()
@@ -323,10 +343,12 @@ pub(crate) async fn remove_phrase(Json(params): Json<IntentFormData>) -> impl In
             result.and_then(|mut op| {
                 if op.is_some() {
                     let mut d = op.as_mut().unwrap();
-                    d.phrases.remove(idx);
-                    let idx = d.intent_idx;
-                    change_num(key, &mut d, |i: &mut Vec<Intent>| {
-                        i[idx].phrase_num = i[idx].phrase_num - 1
+                    let phrase = d.phrases.remove(idx);
+                    detector::delete_intent_embedding(key, phrase.id).and_then(|_| {
+                        let idx = d.intent_idx;
+                        change_num(key, &mut d, |i: &mut Vec<Intent>| {
+                            i[idx].phrase_num = i[idx].phrase_num - 1
+                        })
                     })
                 } else {
                     Ok(())

@@ -29,9 +29,15 @@ impl Intent {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+pub(crate) struct IntentPhraseData {
+    pub(crate) id: usize,
+    pub(crate) phrase: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct IntentDetail {
     pub(crate) intent_idx: usize,
     pub(crate) keywords: Vec<String>,
     pub(crate) regexes: Vec<String>,
-    pub(crate) phrases: Vec<String>,
+    pub(crate) phrases: Vec<IntentPhraseData>,
 }

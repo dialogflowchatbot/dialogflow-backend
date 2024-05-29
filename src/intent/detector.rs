@@ -4,7 +4,9 @@ use regex::Regex;
 use super::dto::{Intent, IntentDetail};
 use super::embedding::embedding;
 use crate::db;
-use crate::result::Result;
+use crate::result::{Error, Result};
+
+const SAVING_PATH: &str = "./data/intentev";
 
 pub(crate) async fn detect(s: &str) -> Result<Option<String>> {
     // let now = std::time::Instant::now();
@@ -28,7 +30,7 @@ pub(crate) async fn detect(s: &str) -> Result<Option<String>> {
                     }
                 }
             }
-            let db = match Database::open("data/intent_embeddings") {
+            let db = match Database::open(SAVING_PATH) {
                 Ok(db) => db,
                 Err(e) => {
                     log::error!("Failed open database {}", &e);
@@ -38,7 +40,7 @@ pub(crate) async fn detect(s: &str) -> Result<Option<String>> {
             let collection = match db.get_collection(&i.id) {
                 Ok(c) => c,
                 Err(e) => {
-                    log::error!("Failed open collection {}", &e);
+                    log::warn!("Failed open collection {}", &e);
                     continue;
                 }
             };
@@ -59,34 +61,70 @@ pub(crate) async fn detect(s: &str) -> Result<Option<String>> {
     Ok(None)
 }
 
-pub(crate) async fn save_intent_embedding(intent_id: &str, s: &str) -> Result<()> {
+fn is_col_not_found_err(e: &oasysdb::prelude::Error) -> bool {
+    e.kind == ErrorKind::DatabaseError
+        && e.message
+            .eq(oasysdb::prelude::Error::collection_not_found().message())
+}
+
+pub(crate) async fn save_intent_embedding(intent_id: &str, s: &str) -> Result<usize> {
     let embedding = embedding(s).await?;
     if embedding.is_empty() {
-        log::warn!("{s} embedding data is empty");
-        return Ok(());
+        let err = format!("{s} embedding data is empty");
+        log::warn!("{}", &err);
+        return Err(Error::ErrorWithMessage(err));
     }
+    let mut db = Database::open(SAVING_PATH)?;
+    let mut collection = match db.get_collection(intent_id) {
+        Ok(c) => c,
+        Err(e) => {
+            if is_col_not_found_err(&e) {
+                let mut config = Config::default();
+                config.distance = Distance::Cosine;
+                Collection::new(&config)
+            } else {
+                return Err(e.into());
+            }
+        }
+    };
+    log::info!("{:#?}", &embedding);
     let vector: Vector = embedding.into();
     let record: Record = Record::new(&vector, &"".into());
-    let mut config = Config::default();
-    config.distance = Distance::Cosine;
-    let records = vec![record];
-    let collection = Collection::build(&config, &records)?;
-    let mut db = Database::open("data/intent_embeddings")?;
+    let r = collection.insert(&record)?;
+    // let collection = Collection::build(&config, &records)?;
+    db.save_collection(intent_id, &collection)?;
+    Ok(r.to_usize())
+}
+
+pub(crate) fn delete_intent_embedding(intent_id: &str, id: usize) -> Result<()> {
+    let mut db = Database::open(SAVING_PATH)?;
+    let mut collection = db.get_collection(intent_id)?;
+    collection.delete(&id.into())?;
     db.save_collection(intent_id, &collection)?;
     Ok(())
 }
 
-pub(crate) async fn save_intent_embedding2(intent_id: &str, s: &str) -> Result<()> {
-    // let embeddings = embedding(s)?;
-    // if embeddings.is_none() {
-    //     return Ok(());
-    // }
-    // let vectors: Vec<Vector> = embeddings.unwrap().iter().map(|v| v.into()).collect();
-    // let records: Vec<Record> = vectors.iter().map(|v| Record::new(v, &"".into())).collect();
-    // let mut config = Config::default();
-    // config.distance = Distance::Cosine;
-    // let collection = Collection::build(&config, &records)?;
-    // let mut db = Database::open("data/intent_embeddings")?;
-    // db.save_collection(intent_id, &collection)?;
+pub(crate) fn delete_all_embeddings(intent_id: &str) -> Result<()> {
+    let mut db = Database::open(SAVING_PATH)?;
+    if let Err(e) = db.delete_collection(intent_id) {
+        if !is_col_not_found_err(&e) {
+            return Err(e.into());
+        }
+    }
     Ok(())
 }
+
+// pub(crate) async fn save_intent_embedding2(intent_id: &str, s: &str) -> Result<()> {
+// let embeddings = embedding(s)?;
+// if embeddings.is_none() {
+//     return Ok(());
+// }
+// let vectors: Vec<Vector> = embeddings.unwrap().iter().map(|v| v.into()).collect();
+// let records: Vec<Record> = vectors.iter().map(|v| Record::new(v, &"".into())).collect();
+// let mut config = Config::default();
+// config.distance = Distance::Cosine;
+// let collection = Collection::build(&config, &records)?;
+// let mut db = Database::open(SAVING_PATH)?;
+// db.save_collection(intent_id, &collection)?;
+// Ok(())
+// }
