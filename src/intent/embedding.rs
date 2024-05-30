@@ -276,53 +276,59 @@ fn construct_model_file_path(mirror: &str, f: &str) -> String {
 //     tokenizers::DecoderWrapper,
 // >;
 
-pub(crate) fn load_model_files(mirror: &str) -> Result<(BertModel, Tokenizer)> {
-    let f = construct_model_file_path(mirror, "config.json");
-    let config = std::fs::read_to_string(&f)?;
-    let config: serde_json::Value = serde_json::from_str(&config)?;
-    let pad_token_id = config["pad_token_id"].as_u64().unwrap_or(0) as u32;
-    let config: Config = serde_json::from_value(config)?;
-    let f = construct_model_file_path(mirror, "tokenizer.json");
-    let mut tokenizer = match Tokenizer::from_file(&f) {
-        Ok(t) => t,
-        Err(e) => return Err(Error::ErrorWithMessage(format!("{}", &e))),
-    };
-    // tokenizer config
+fn set_tokenizer_config(
+    mirror: &str,
+    mut tokenizer: Tokenizer,
+    pad_token_id: u32,
+) -> Result<Tokenizer> {
     let f = construct_model_file_path(mirror, "tokenizer_config.json");
-    let j: serde_json::Value = serde_json::from_slice(std::fs::read(&f)?.as_slice())?;
-    let model_max_length = j["model_max_length"]
-        .as_f64()
-        .expect("Error reading model_max_length from tokenizer_config.json")
-        as f32;
-    let max_length = 3096.min(model_max_length as usize);
-    let pad_token = j["pad_token"]
-        .as_str()
-        .expect("Error reading pad_token from tokenier_config.json")
-        .into();
-    // log::info!("p1 {}", tokenizer.get_padding().unwrap().pad_token);
-    // log::info!("t1 {}", tokenizer.get_truncation().unwrap().max_length);
-    let mut tokenizer = match tokenizer
-        .with_padding(Some(PaddingParams {
-            strategy: PaddingStrategy::BatchLongest,
-            pad_token,
-            pad_id: pad_token_id,
-            ..Default::default()
-        }))
-        .with_truncation(Some(TruncationParams {
-            max_length,
-            ..Default::default()
-        })) {
+    let p = std::path::Path::new(&f);
+    let t = if p.exists() {
+        let j: serde_json::Value = serde_json::from_slice(std::fs::read(&f)?.as_slice())?;
+        let model_max_length = j["model_max_length"]
+            .as_f64()
+            .expect("Error reading model_max_length from tokenizer_config.json")
+            as f32;
+        let max_length = 8192.min(model_max_length as usize);
+        let pad_token = j["pad_token"]
+            .as_str()
+            .expect("Error reading pad_token from tokenier_config.json")
+            .into();
+        // log::info!("p1 {}", tokenizer.get_padding().unwrap().pad_token);
+        // log::info!("t1 {}", tokenizer.get_truncation().unwrap().max_length);
+        tokenizer
+            .with_padding(Some(PaddingParams {
+                strategy: PaddingStrategy::BatchLongest,
+                pad_token,
+                pad_id: pad_token_id,
+                ..Default::default()
+            }))
+            .with_truncation(Some(TruncationParams {
+                max_length,
+                ..Default::default()
+            }))
+    } else {
+        tokenizer.with_padding(None).with_truncation(None)
+    };
+    let t = match t {
         Ok(t) => t.clone().into(),
         Err(e) => {
             log::warn!("{:?}", &e);
             tokenizer
         }
     };
+
+    Ok(t)
     // log::info!("p2 {}", tokenizer.get_padding().unwrap().pad_token);
     // log::info!("t2 {}", tokenizer.get_truncation().unwrap().max_length);
-    // end
-    //
+}
+
+fn set_special_tokens_map(mirror: &str, tokenizer: &mut Tokenizer) -> Result<()> {
     let f = construct_model_file_path(mirror, "special_tokens_map.json");
+    let p = std::path::Path::new(&f);
+    if !p.exists() {
+        return Ok(());
+    }
     if let serde_json::Value::Object(root_object) =
         serde_json::from_slice(std::fs::read(&f)?.as_slice())?
     {
@@ -345,7 +351,22 @@ pub(crate) fn load_model_files(mirror: &str) -> Result<(BertModel, Tokenizer)> {
             }
         }
     }
-    // end
+    Ok(())
+}
+
+pub(crate) fn load_model_files(mirror: &str) -> Result<(BertModel, Tokenizer)> {
+    let f = construct_model_file_path(mirror, "config.json");
+    let config = std::fs::read_to_string(&f)?;
+    let config: serde_json::Value = serde_json::from_str(&config)?;
+    let pad_token_id = config["pad_token_id"].as_u64().unwrap_or(0) as u32;
+    let config: Config = serde_json::from_value(config)?;
+    let f = construct_model_file_path(mirror, "tokenizer.json");
+    let tokenizer = match Tokenizer::from_file(&f) {
+        Ok(t) => t,
+        Err(e) => return Err(Error::ErrorWithMessage(format!("{}", &e))),
+    };
+    let mut tokenizer = set_tokenizer_config(mirror, tokenizer, pad_token_id)?;
+    set_special_tokens_map(mirror, &mut tokenizer)?;
     let f = construct_model_file_path(mirror, "model.safetensors");
     let vb = unsafe { VarBuilder::from_mmaped_safetensors(&[&f], DTYPE, &device()?)? };
     let model = BertModel::load(vb, &config)?;
