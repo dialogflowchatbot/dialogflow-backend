@@ -14,7 +14,7 @@ pub(crate) const INTENT_LIST_KEY: &str = "intents";
 pub(crate) const TABLE: redb::TableDefinition<&str, &[u8]> =
     redb::TableDefinition::new(INTENT_LIST_KEY);
 
-pub(crate) fn init(is_en: bool) -> Result<()> {
+pub(crate) fn init(robot_id: &str, is_en: bool) -> Result<()> {
     let mut intents: Vec<Intent> = Vec::with_capacity(2);
 
     // Positive
@@ -49,8 +49,10 @@ pub(crate) fn init(is_en: bool) -> Result<()> {
     intent.keyword_num = intent_detail.keywords.len();
     intent.regex_num = intent_detail.regexes.len();
 
+    let table_name = format!("{}intents", robot_id);
+    let table: redb::TableDefinition<&str, &[u8]> = redb::TableDefinition::new(&table_name);
     // let mut table = write_txn.open_table(TABLE)?;
-    db::write(TABLE, intent.id.as_str(), &intent_detail)?;
+    db::write(table, intent.id.as_str(), &intent_detail)?;
 
     intents.push(intent);
 
@@ -113,11 +115,11 @@ pub(crate) fn init(is_en: bool) -> Result<()> {
     intent.keyword_num = intent_detail.keywords.len();
     intent.regex_num = intent_detail.regexes.len();
 
-    db::write(TABLE, intent.id.as_str(), &intent_detail)?;
+    db::write(table, intent.id.as_str(), &intent_detail)?;
 
     intents.push(intent);
 
-    db::write(TABLE, INTENT_LIST_KEY, &intents)
+    db::write(table, INTENT_LIST_KEY, &intents)
 }
 
 pub(crate) async fn list() -> impl IntoResponse {
@@ -306,7 +308,7 @@ pub(crate) async fn add_phrase(
         ))));
     }
     let mut d = r.unwrap();
-    let r = detector::save_intent_embedding(key, &params.data).await;
+    let r = detector::save_intent_embedding(&params.robot_id, key, &params.data).await;
     if r.is_err() {
         return to_res(r.map(|_| ()));
     }
@@ -359,5 +361,5 @@ pub(crate) async fn remove_phrase(Json(params): Json<IntentFormData>) -> impl In
 }
 
 pub(crate) async fn detect(Json(params): Json<IntentFormData>) -> impl IntoResponse {
-    to_res(detector::detect(&params.data).await)
+    to_res(detector::detect(&params.robot_id, &params.data).await)
 }

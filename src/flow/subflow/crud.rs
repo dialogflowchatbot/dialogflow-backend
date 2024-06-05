@@ -1,10 +1,11 @@
+use std::sync::Mutex;
+
 use axum::extract::{Query, Request};
 use axum::http::{header::HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use once_cell::sync::Lazy;
 use redb::TableDefinition;
-use tokio::sync::Mutex;
 
 use super::dto::{SubFlowDetail, SubFlowFormData};
 use crate::db;
@@ -54,11 +55,8 @@ pub(crate) async fn simple_list(Query(q): Query<SubFlowFormData>) -> Response {
     "[]".into_response()
 }
 
-pub(crate) async fn new_subflow(
-    mainflow_id: &str,
-    subflow_name: &str,
-) -> Result<Vec<SubFlowDetail>> {
-    let _ = LOCK.lock().await;
+pub(crate) fn new_subflow(mainflow_id: &str, subflow_name: &str) -> Result<Vec<SubFlowDetail>> {
+    let _lock = LOCK.lock();
     db::query(TABLE, mainflow_id)
         .map(|op: Option<Vec<SubFlowDetail>>| {
             let mut subflow = SubFlowDetail::new(subflow_name);
@@ -81,7 +79,7 @@ pub(crate) async fn new_subflow(
 }
 
 pub(crate) async fn new(Query(form): Query<SubFlowFormData>) -> impl IntoResponse {
-    to_res(new_subflow(&form.main_flow_id, &form.data).await)
+    to_res(new_subflow(&form.main_flow_id, &form.data))
 }
 
 pub(crate) async fn save(

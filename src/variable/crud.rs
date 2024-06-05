@@ -15,7 +15,7 @@ use crate::web::server::to_res;
 const TABLE: redb::TableDefinition<&str, &[u8]> = redb::TableDefinition::new("variables");
 // pub(crate) const VARIABLE_LIST_KEY: &str = "variables";
 
-pub(crate) fn init(is_en: bool) -> Result<()> {
+pub(crate) fn init(robot_id: &str, is_en: bool) -> Result<()> {
     let v = Variable {
         var_name: String::from(if is_en {
             "CollectionVar"
@@ -30,7 +30,9 @@ pub(crate) fn init(is_en: bool) -> Result<()> {
         obtain_value_expression: String::new(),
         cach_enabled: true,
     };
-    db::write(TABLE, &v.var_name, &v)
+    let table_name = format!("{}vars", robot_id);
+    let table: redb::TableDefinition<&str, &[u8]> = redb::TableDefinition::new(&table_name);
+    db::write(table, &v.var_name, &v)
 }
 
 pub(crate) async fn list() -> impl IntoResponse {

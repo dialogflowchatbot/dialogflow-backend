@@ -9,8 +9,9 @@ use crate::external::http::crud as http;
 use crate::flow::mainflow::crud as mainflow;
 use crate::flow::rt::context;
 use crate::intent::crud as intent;
-use crate::man::settings::{self, Settings};
+use crate::man::settings::{self, GlobalSettings};
 use crate::result::{Error, Result};
+use crate::robot::crud as robot;
 use crate::variable::crud as variable;
 use crate::web::server;
 
@@ -36,22 +37,24 @@ pub(crate) static DB: Lazy<Database> = Lazy::new(|| {
     }
 });
 
-pub(crate) async fn init() -> Result<Settings> {
+pub(crate) fn init() -> Result<GlobalSettings> {
     let is_en = *server::IS_EN;
 
     // Settings
     settings::init_table()?;
     mainflow::init_default_names(is_en)?;
     if settings::exists()? {
-        return Ok(settings::get_settings()?.unwrap());
+        return Ok(settings::get_global_settings()?.unwrap());
     }
-    let settings = settings::init()?;
+    let settings = settings::init_global()?;
+    let robot_id = robot::init(is_en)?;
+    settings::init(&robot_id)?;
     // 意图
-    intent::init(is_en)?;
+    intent::init(&robot_id, is_en)?;
     // 变量
-    variable::init(is_en)?;
+    variable::init(&robot_id, is_en)?;
     // 主流程
-    mainflow::init().await?;
+    mainflow::init(&robot_id)?;
     // 流程上下文
     context::init()?;
     // Http 接口

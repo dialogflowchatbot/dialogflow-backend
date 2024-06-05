@@ -25,12 +25,28 @@ pub(crate) enum EmbeddingProvider {
     Ollama(String),
 }
 
-pub(super) async fn embedding(s: &str) -> Result<Vec<f32>> {
-    if let Some(settings) = settings::get_settings()? {
+pub(super) async fn embedding(robot_id: &str, s: &str) -> Result<Vec<f32>> {
+    if let Some(settings) = settings::get_settings(robot_id)? {
         match settings.embedding_provider.provider {
             EmbeddingProvider::HuggingFace(m) => hugging_face(&m.get_info(), s),
-            EmbeddingProvider::OpenAI(m) => open_ai(&m, s,settings.embedding_provider.connect_timeout_millis,settings.embedding_provider.read_timeout_millis).await,
-            EmbeddingProvider::Ollama(m) => ollama(&m, s,settings.embedding_provider.connect_timeout_millis,settings.embedding_provider.read_timeout_millis).await,
+            EmbeddingProvider::OpenAI(m) => {
+                open_ai(
+                    &m,
+                    s,
+                    settings.embedding_provider.connect_timeout_millis,
+                    settings.embedding_provider.read_timeout_millis,
+                )
+                .await
+            }
+            EmbeddingProvider::Ollama(m) => {
+                ollama(
+                    &m,
+                    s,
+                    settings.embedding_provider.connect_timeout_millis,
+                    settings.embedding_provider.read_timeout_millis,
+                )
+                .await
+            }
         }
     } else {
         Ok(vec![])
@@ -427,7 +443,12 @@ fn hugging_face(info: &HuggingFaceModelInfo, s: &str) -> Result<Vec<f32>> {
 //     }
 // }
 
-async fn open_ai(m: &str, s: &str,connect_timeout_millis:u16,read_timeout_millis:u16) -> Result<Vec<f32>> {
+async fn open_ai(
+    m: &str,
+    s: &str,
+    connect_timeout_millis: u16,
+    read_timeout_millis: u16,
+) -> Result<Vec<f32>> {
     let client = reqwest::Client::builder()
         .connect_timeout(Duration::from_millis(connect_timeout_millis.into()))
         .read_timeout(Duration::from_millis(read_timeout_millis.into()))
@@ -465,7 +486,12 @@ async fn open_ai(m: &str, s: &str,connect_timeout_millis:u16,read_timeout_millis
     Ok(embedding_result)
 }
 
-async fn ollama(m: &str, s: &str,connect_timeout_millis:u16,read_timeout_millis:u16) -> Result<Vec<f32>> {
+async fn ollama(
+    m: &str,
+    s: &str,
+    connect_timeout_millis: u16,
+    read_timeout_millis: u16,
+) -> Result<Vec<f32>> {
     let client = reqwest::Client::builder()
         .connect_timeout(Duration::from_millis(connect_timeout_millis.into()))
         .read_timeout(Duration::from_millis(read_timeout_millis.into()))

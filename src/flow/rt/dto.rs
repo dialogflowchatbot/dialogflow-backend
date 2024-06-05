@@ -12,6 +12,8 @@ pub(crate) enum UserInputResult {
 
 #[derive(Deserialize)]
 pub(crate) struct Request {
+    #[serde(rename = "robotId")]
+    pub(crate) robot_id: String,
     #[serde(rename = "mainFlowId")]
     pub(crate) main_flow_id: String,
     #[serde(rename = "sessionId")]

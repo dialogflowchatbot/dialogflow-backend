@@ -55,11 +55,11 @@ fn get_lang() -> String {
 
 pub async fn start_app() {
     let settings = {
-        let mut s = crate::db::init().await.expect("Initialize database failed");
+        let mut s = crate::db::init().expect("Initialize database failed");
         for argument in std::env::args() {
             if argument.eq("-rs") {
-                s = settings::Settings::default();
-                settings::save_settings(&s).expect("Reset settings failed");
+                s = settings::GlobalSettings::default();
+                settings::save_global_settings(&s).expect("Reset settings failed");
                 break;
             }
         }
@@ -83,10 +83,7 @@ pub async fn start_app() {
     }
 
     let (sender, recv) = tokio::sync::oneshot::channel::<()>();
-    tokio::spawn(crate::flow::rt::context::clean_expired_session(
-        recv,
-        settings.max_session_duration_min,
-    ));
+    tokio::spawn(crate::flow::rt::context::clean_expired_session(recv, 30));
 
     let r: Router = gen_router();
     let app = r.fallback(fallback);

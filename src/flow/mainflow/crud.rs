@@ -27,10 +27,14 @@ pub(crate) fn init_default_names(is_en: bool) -> Result<()> {
         .map_err(|_| Error::ErrorWithMessage(String::from("Dup")))
 }
 
-pub(crate) async fn init() -> Result<MainFlowDetail> {
-    db::init_table(TABLE)?;
-    db::init_table(subflow::TABLE)?;
-    create_main_flow(&DEFAULT_NAMES.get().unwrap().0).await
+pub(crate) fn init(robot_id: &str) -> Result<MainFlowDetail> {
+    let table_name = format!("{}-mainflows", robot_id);
+    let main_flow_table: TableDefinition<&str, &[u8]> = TableDefinition::new(&table_name);
+    db::init_table(main_flow_table)?;
+    let table_name = format!("{}-subflows", robot_id);
+    let sub_flow_table: TableDefinition<&str, &[u8]> = TableDefinition::new(&table_name);
+    db::init_table(sub_flow_table)?;
+    create_main_flow(&DEFAULT_NAMES.get().unwrap().0)
 }
 
 pub(crate) async fn list() -> impl IntoResponse {
@@ -38,11 +42,11 @@ pub(crate) async fn list() -> impl IntoResponse {
 }
 
 pub(crate) async fn new(Json(data): Json<MainFlowDetail>) -> impl IntoResponse {
-    to_res::<MainFlowDetail>(create_main_flow(&data.name).await)
+    to_res::<MainFlowDetail>(create_main_flow(&data.name))
 }
 
-async fn create_main_flow(name: &str) -> Result<MainFlowDetail> {
-    let _ = LOCK.lock().await;
+fn create_main_flow(name: &str) -> Result<MainFlowDetail> {
+    let _ = LOCK.lock();
     let count = db::count(TABLE)?;
     let mut buffer = itoa::Buffer::new();
     let count = buffer.format(count + 1);
@@ -53,7 +57,7 @@ async fn create_main_flow(name: &str) -> Result<MainFlowDetail> {
         enabled: true,
     };
     db::write(TABLE, main_flow.id.as_str(), &main_flow)?;
-    subflow::new_subflow(&main_flow.id, &DEFAULT_NAMES.get().unwrap().1).await?;
+    subflow::new_subflow(&main_flow.id, &DEFAULT_NAMES.get().unwrap().1)?;
     Ok(main_flow)
 }
 

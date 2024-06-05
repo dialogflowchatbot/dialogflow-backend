@@ -16,7 +16,7 @@ pub(in crate::flow::rt) async fn process(req: &mut Request) -> Result<Response> 
     // println!("add_node {:?}", now.elapsed());
     // let now = std::time::Instant::now();
     if req.user_input_intent.is_none() {
-        req.user_input_intent = detector::detect(&req.user_input).await?;
+        req.user_input_intent = detector::detect(&req.robot_id, &req.user_input).await?;
         // println!("{:?}", req.user_input_intent);
     }
     if !req.import_variables.is_empty() {

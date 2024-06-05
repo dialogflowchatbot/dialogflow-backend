@@ -339,10 +339,10 @@ impl SendEmailNode {
 }
 
 impl RuntimeNode for SendEmailNode {
-    fn exec(&self, _req: &Request, ctx: &mut Context, _response: &mut Response) -> bool {
+    fn exec(&self, req: &Request, ctx: &mut Context, _response: &mut Response) -> bool {
         // println!("Into SendEmailNode");
         use crate::man::settings::get_settings;
-        if let Ok(op) = get_settings() {
+        if let Ok(op) = get_settings(&req.robot_id) {
             if let Some(settings) = op {
                 if !settings.smtp_host.is_empty() {
                     match self.send_email(&settings) {

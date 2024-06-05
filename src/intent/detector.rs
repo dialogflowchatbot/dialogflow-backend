@@ -8,7 +8,7 @@ use crate::result::{Error, Result};
 
 const SAVING_PATH: &str = "./data/intentev";
 
-pub(crate) async fn detect(s: &str) -> Result<Option<String>> {
+pub(crate) async fn detect(robot_id: &str, s: &str) -> Result<Option<String>> {
     // let now = std::time::Instant::now();
     let op: Option<Vec<Intent>> = db::query(super::crud::TABLE, super::crud::INTENT_LIST_KEY)?;
     // println!("inner intent detect {:?}", now.elapsed());
@@ -47,7 +47,7 @@ pub(crate) async fn detect(s: &str) -> Result<Option<String>> {
                 }
             };
             if search_vector.is_none() {
-                search_vector = Some(embedding(s).await?.into());
+                search_vector = Some(embedding(robot_id, s).await?.into());
             }
             if search_vector.is_some() {
                 let results = collection.search(search_vector.as_ref().unwrap(), 5)?;
@@ -69,8 +69,12 @@ fn is_col_not_found_err(e: &oasysdb::prelude::Error) -> bool {
             .eq(oasysdb::prelude::Error::collection_not_found().message())
 }
 
-pub(crate) async fn save_intent_embedding(intent_id: &str, s: &str) -> Result<usize> {
-    let embedding = embedding(s).await?;
+pub(crate) async fn save_intent_embedding(
+    robot_id: &str,
+    intent_id: &str,
+    s: &str,
+) -> Result<usize> {
+    let embedding = embedding(robot_id, s).await?;
     if embedding.is_empty() {
         let err = format!("{s} embedding data is empty");
         log::warn!("{}", &err);

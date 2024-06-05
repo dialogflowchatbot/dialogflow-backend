@@ -7,6 +7,7 @@ pub(crate) mod flow;
 pub(crate) mod intent;
 pub(crate) mod man;
 pub(crate) mod result;
+pub(crate) mod robot;
 // #[cfg(test)]
 // pub mod test;
 pub(crate) mod variable;

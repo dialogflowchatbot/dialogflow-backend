@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Debug)]
 pub(crate) struct IntentFormData {
+    pub(crate) robot_id: String,
     pub(crate) id: String,
     pub(crate) data: String,
 }
