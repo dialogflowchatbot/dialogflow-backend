@@ -48,6 +48,8 @@ fn deser() {
             api_url: String::new(),
             api_key: String::new(),
             model: String::new(),
+            connect_timeout_millis: 1000,
+            read_timeout_millis: 5000,
         },
         smtp_host: String::new(),
         smtp_username: String::new(),
@@ -74,6 +76,10 @@ pub(crate) struct EmbeddingProvider {
     #[serde(rename = "apiKey")]
     pub(crate) api_key: String,
     pub(crate) model: String,
+    #[serde(rename = "connectTimeoutMillis")]
+    pub(crate) connect_timeout_millis: u16,
+    #[serde(rename = "readTimeoutMillis")]
+    pub(crate) read_timeout_millis: u16,
 }
 
 impl Default for Settings {
@@ -89,6 +95,8 @@ impl Default for Settings {
                 api_url: String::new(),
                 api_key: String::new(),
                 model: String::new(),
+                connect_timeout_millis:1500,
+                read_timeout_millis:3000,
             },
             smtp_host: String::new(),
             smtp_username: String::new(),

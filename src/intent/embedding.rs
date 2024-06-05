@@ -29,8 +29,8 @@ pub(super) async fn embedding(s: &str) -> Result<Vec<f32>> {
     if let Some(settings) = settings::get_settings()? {
         match settings.embedding_provider.provider {
             EmbeddingProvider::HuggingFace(m) => hugging_face(&m.get_info(), s),
-            EmbeddingProvider::OpenAI(m) => open_ai(&m, s).await,
-            EmbeddingProvider::Ollama(m) => ollama(&m, s).await,
+            EmbeddingProvider::OpenAI(m) => open_ai(&m, s,settings.embedding_provider.connect_timeout_millis,settings.embedding_provider.read_timeout_millis).await,
+            EmbeddingProvider::Ollama(m) => ollama(&m, s,settings.embedding_provider.connect_timeout_millis,settings.embedding_provider.read_timeout_millis).await,
         }
     } else {
         Ok(vec![])
@@ -412,10 +412,25 @@ fn hugging_face(info: &HuggingFaceModelInfo, s: &str) -> Result<Vec<f32>> {
     Ok(r)
 }
 
-async fn open_ai(m: &str, s: &str) -> Result<Vec<f32>> {
+// fn tt() {
+//     let prs = vec![0.1f32,0.1f32,0.1f32,0.1f32,];
+//     let mut top: Vec<_> = prs.iter().enumerate().collect();
+//     top.sort_by(|a, b| b.1.partial_cmp(a.1).unwrap());
+//     let top = top.into_iter().take(5).collect::<Vec<_>>();
+
+//     for &(i, p) in &top {
+//         println!(
+//             "{:50}: {:.2}%",
+//             i,
+//             p * 100.0
+//         );
+//     }
+// }
+
+async fn open_ai(m: &str, s: &str,connect_timeout_millis:u16,read_timeout_millis:u16) -> Result<Vec<f32>> {
     let client = reqwest::Client::builder()
-        .connect_timeout(Duration::from_millis(2000))
-        .read_timeout(Duration::from_millis(10000))
+        .connect_timeout(Duration::from_millis(connect_timeout_millis.into()))
+        .read_timeout(Duration::from_millis(read_timeout_millis.into()))
         .build()?;
     let mut map = Map::new();
     map.insert(String::from("input"), Value::String(String::from(s)));
@@ -450,10 +465,10 @@ async fn open_ai(m: &str, s: &str) -> Result<Vec<f32>> {
     Ok(embedding_result)
 }
 
-async fn ollama(m: &str, s: &str) -> Result<Vec<f32>> {
+async fn ollama(m: &str, s: &str,connect_timeout_millis:u16,read_timeout_millis:u16) -> Result<Vec<f32>> {
     let client = reqwest::Client::builder()
-        .connect_timeout(Duration::from_millis(2000))
-        .read_timeout(Duration::from_millis(10000))
+        .connect_timeout(Duration::from_millis(connect_timeout_millis.into()))
+        .read_timeout(Duration::from_millis(read_timeout_millis.into()))
         .build()?;
     let mut map = Map::new();
     map.insert(String::from("prompt"), Value::String(String::from(s)));
