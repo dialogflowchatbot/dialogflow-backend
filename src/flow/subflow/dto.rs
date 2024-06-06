@@ -10,6 +10,8 @@ use crate::result::{Error, Result};
 
 #[derive(Deserialize)]
 pub(crate) struct SubFlowFormData {
+    #[serde(rename = "robotId")]
+    pub(crate) robot_id: String,
     #[serde(rename = "mainFlowId")]
     pub(crate) main_flow_id: String,
     pub(crate) data: String,

@@ -7,16 +7,18 @@ use super::node::{
     RuntimeNnodeEnum, SendEmailNode, TerminateNode, TextNode,
 };
 use crate::db;
+use crate::db_executor;
 use crate::flow::demo;
-use crate::flow::subflow::crud::TABLE;
+use crate::flow::subflow::crud::TABLE_SUFFIX;
 use crate::flow::subflow::dto::{BranchType, CanvasCells, NextActionType, Node, SubFlowDetail};
 use crate::result::{Error, Result};
 
-pub(crate) fn convert_flow(client_language: &str, mainflow_id: &str) -> Result<()> {
+pub(crate) fn convert_flow(client_language: &str, robot_id: &str, mainflow_id: &str) -> Result<()> {
     let flows: Vec<SubFlowDetail> = if let Some(t) = demo::get_demo(client_language, mainflow_id) {
         serde_json::from_str(t)?
     } else {
-        let r: Option<Vec<SubFlowDetail>> = db::query(TABLE, mainflow_id)?;
+        let r: Option<Vec<SubFlowDetail>> =
+            db_executor!(db::query, robot_id, TABLE_SUFFIX, mainflow_id)?;
         if r.is_none() {
             return Err(Error::ErrorWithMessage(String::from("Flow data not found")));
         }

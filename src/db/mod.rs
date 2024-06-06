@@ -19,6 +19,15 @@ use crate::web::server;
 // const RUNTIME_NODE_TABLE: TableDefinition<&str, &[u8]> = TableDefinition::new("runtimeNodes");
 const TABLE_FILE_NAME: &str = "./data/flow.db";
 
+#[macro_export]
+macro_rules! db_executor (
+    ($func: expr, $robot_id: expr, $suffix: expr, $($bind: expr),*) => ({
+        let table_name = format!("{}{}", $robot_id, $suffix);
+        let table: redb::TableDefinition<&str, &[u8]> = redb::TableDefinition::new(&table_name);
+        $func(table $(,($bind))*)
+    });
+);
+
 pub(crate) static DB: Lazy<Database> = Lazy::new(|| {
     let data_folder = std::path::Path::new("./data");
     if !data_folder.exists() {
@@ -58,7 +67,7 @@ pub(crate) fn init() -> Result<GlobalSettings> {
     // 流程上下文
     context::init()?;
     // Http 接口
-    http::init()?;
+    http::init(&robot_id)?;
     Ok(settings)
 }
 
@@ -264,23 +273,28 @@ pub(crate) fn save_txn<'a>(
 }
 */
 
-pub(crate) fn save_txn<V>(
+// pub(crate) fn save_txn<V>(
+pub(crate) fn save_txn(
     // v: Vec<(TableDefinition<K, V>,impl for<'a> Borrow<K::SelfType<'a>>, Box<&dyn erased_serde::Serialize>)>,
     v: Vec<(
-        TableDefinition<&str, V>,
+        // TableDefinition<&str, V>,
+        &str,
+        &str,
         &str,
         Box<&dyn erased_serde::Serialize>,
     )>,
 ) -> Result<()>
-where
-    V: for<'b> redb::Value<SelfType<'b> = &'b [u8]>,
+// where
+//     V: for<'b> redb::Value<SelfType<'b> = &'b [u8]>,
 {
     // let db = Database::open(TABLE_FILE_NAME)?;
     let write_txn = DB.begin_write()?;
     let mut err: Option<Error> = None;
     {
         for d in v {
-            let mut table = write_txn.open_table(d.0)?;
+            let table_name = format!("{}{}", d.0, d.1);
+            let t: redb::TableDefinition<&str, &[u8]> = redb::TableDefinition::new(&table_name);
+            let mut table = write_txn.open_table(t)?;
             match serde_json::to_vec(&d.2) {
                 Ok(r) => {
                     table.insert(d.1, r.as_slice())?;
@@ -311,6 +325,20 @@ where
     {
         let mut table = write_txn.open_table(table)?;
         table.remove(key)?;
+    }
+    write_txn.commit()?;
+    Ok(())
+}
+
+pub(crate) fn delete_table<'a, K, V>(table: redb::TableDefinition<K, V>) -> Result<()>
+where
+    K: redb::Key,
+    for<'b> V: redb::Value<SelfType<'b> = &'b [u8]>,
+{
+    // let db = Database::open(TABLE_FILE_NAME)?;
+    let write_txn = DB.begin_write()?;
+    {
+        write_txn.delete_table(table)?;
     }
     write_txn.commit()?;
     Ok(())

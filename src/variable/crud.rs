@@ -1,19 +1,37 @@
+use std::collections::HashMap;
 // use std::borrow::BorrowMut;
 use std::vec::Vec;
 
+use axum::extract::Query;
 use axum::response::IntoResponse;
 use axum::Json;
 
 use super::dto::Variable;
 use super::dto::{VariableObtainValueExpressionType, VariableType, VariableValueSource};
 use crate::db;
+use crate::db_executor;
 use crate::flow::rt::context::Context;
 use crate::flow::rt::dto::Request;
-use crate::result::Result;
+use crate::result::{Error, Result};
 use crate::web::server::to_res;
 
-const TABLE: redb::TableDefinition<&str, &[u8]> = redb::TableDefinition::new("variables");
+// const TABLE: redb::TableDefinition<&str, &[u8]> = redb::TableDefinition::new("variables");
 // pub(crate) const VARIABLE_LIST_KEY: &str = "variables";
+pub(crate) const TABLE_SUFFIX: &str = "vars";
+
+// #[macro_export]
+// macro_rules! db_executor (
+//     ($func: expr, $robot_id: expr, $($bind: expr),*) => ({
+//         let table_name = format!("{}vars", $robot_id);
+//         let table: redb::TableDefinition<&str, &[u8]> = redb::TableDefinition::new(&table_name);
+//         $func(table $(,($bind))*)
+//     });
+// );
+
+#[inline]
+fn get_table_name(robot_id: &str) -> String {
+    format!("{}vars", robot_id)
+}
 
 pub(crate) fn init(robot_id: &str, is_en: bool) -> Result<()> {
     let v = Variable {
@@ -30,16 +48,29 @@ pub(crate) fn init(robot_id: &str, is_en: bool) -> Result<()> {
         obtain_value_expression: String::new(),
         cach_enabled: true,
     };
-    let table_name = format!("{}vars", robot_id);
-    let table: redb::TableDefinition<&str, &[u8]> = redb::TableDefinition::new(&table_name);
-    db::write(table, &v.var_name, &v)
+    // let result = db_executor!(db::write, robot_id, &v.var_name, &v);
+    // let table_name = get_table_name(robot_id);
+    // let table: redb::TableDefinition<&str, &[u8]> = redb::TableDefinition::new(&table_name);
+    // db::write(table, &v.var_name, &v)
+    db_executor!(db::write, robot_id, TABLE_SUFFIX, &v.var_name, &v)
 }
 
-pub(crate) async fn list() -> impl IntoResponse {
-    to_res::<Vec<Variable>>(db::get_all(TABLE))
+pub(crate) async fn list(Query(q): Query<HashMap<String, String>>) -> impl IntoResponse {
+    // let result:Result<Vec<Variable>> = db_executor!(db::get_all, "robot_id",);
+    // to_res::<Vec<Variable>>(db::get_all(TABLE))
+    if let Some(robot_id) = q.get("robot_id") {
+        to_res::<Vec<Variable>>(db_executor!(db::get_all, robot_id, TABLE_SUFFIX,))
+    } else {
+        to_res(Err(Error::ErrorWithMessage(String::from(
+            "Parameter: robot_id is missing.",
+        ))))
+    }
 }
 
-pub(crate) async fn add(Json(v): Json<Variable>) -> impl IntoResponse {
+pub(crate) async fn add(
+    Query(q): Query<HashMap<String, String>>,
+    Json(v): Json<Variable>,
+) -> impl IntoResponse {
     /*
     let r: Result<Option<Vec<Variable>>> = db::query(TABLE, VARIABLE_LIST_KEY);
     let r = r.and_then(|op| {
@@ -64,7 +95,20 @@ pub(crate) async fn add(Json(v): Json<Variable>) -> impl IntoResponse {
     });
     to_res(r)
     */
-    to_res(db::write(TABLE, &v.var_name, &v))
+    // to_res(db::write(TABLE, &v.var_name, &v))
+    if let Some(robot_id) = q.get("robot_id") {
+        to_res(db_executor!(
+            db::write,
+            robot_id,
+            TABLE_SUFFIX,
+            &v.var_name,
+            &v
+        ))
+    } else {
+        to_res(Err(Error::ErrorWithMessage(String::from(
+            "Parameter: robot_id is missing.",
+        ))))
+    }
 }
 
 // fn t1<R, F: FnMut(String) -> R>(s: String, mut f: F) -> R {
@@ -76,7 +120,10 @@ pub(crate) async fn add(Json(v): Json<Variable>) -> impl IntoResponse {
 //     r
 // }
 
-pub(crate) async fn delete(Json(v): Json<Variable>) -> impl IntoResponse {
+pub(crate) async fn delete(
+    Query(q): Query<HashMap<String, String>>,
+    Json(v): Json<Variable>,
+) -> impl IntoResponse {
     /*
     let r = v
         .var_name
@@ -93,10 +140,22 @@ pub(crate) async fn delete(Json(v): Json<Variable>) -> impl IntoResponse {
         });
     to_res(r)
     */
-    to_res(db::remove(TABLE, v.var_name.as_str()))
+    // to_res(db::remove(TABLE, v.var_name.as_str()))
+    if let Some(robot_id) = q.get("robot_id") {
+        to_res(db_executor!(
+            db::remove,
+            robot_id,
+            TABLE_SUFFIX,
+            v.var_name.as_str()
+        ))
+    } else {
+        to_res(Err(Error::ErrorWithMessage(String::from(
+            "Parameter: robot_id is missing.",
+        ))))
+    }
 }
 
-pub(crate) fn get(name: &str) -> Result<Option<Variable>> {
+pub(crate) fn get(robot_id: &str, name: &str) -> Result<Option<Variable>> {
     /*
     db::query(TABLE, VARIABLE_LIST_KEY).and_then(|op: Option<Vec<Variable>>| {
         if let Some(d) = op {
@@ -109,11 +168,12 @@ pub(crate) fn get(name: &str) -> Result<Option<Variable>> {
         return Ok(None);
     })
     */
-    db::query(TABLE, name)
+    // db::query(TABLE, name)
+    db_executor!(db::query, robot_id, TABLE_SUFFIX, name)
 }
 
 pub(crate) fn get_value(name: &str, req: &Request, ctx: &mut Context) -> String {
-    if let Ok(r) = get(name) {
+    if let Ok(r) = get(&req.robot_id, name) {
         if let Some(v) = r {
             if let Some(val) = v.get_value(req, ctx) {
                 return val.val_to_string();

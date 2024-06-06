@@ -9,9 +9,10 @@ use serde::{Deserialize, Serialize};
 use crate::db;
 use crate::intent::embedding;
 use crate::result::{Error, Result};
+use crate::robot::dto::RobotQuery;
 use crate::web::server::{self, to_res};
 
-const TABLE: redb::TableDefinition<&str, &[u8]> = redb::TableDefinition::new("settings");
+pub(crate) const TABLE: redb::TableDefinition<&str, &[u8]> = redb::TableDefinition::new("settings");
 pub(crate) const SETTINGS_KEY: &str = "global-settings";
 
 #[derive(Deserialize, Serialize)]
@@ -20,11 +21,6 @@ pub(crate) struct GlobalSettings {
     pub(crate) port: u16,
     #[serde(rename = "selectRandomPortWhenConflict")]
     pub(crate) select_random_port_when_conflict: bool,
-}
-
-#[derive(Deserialize)]
-pub(crate) struct SettingsQuery {
-    pub(crate) robot_id: String,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -160,12 +156,12 @@ pub(crate) fn get_settings(robot_id: &str) -> Result<Option<Settings>> {
     db::query(TABLE, robot_id)
 }
 
-pub(crate) async fn get(Query(q): Query<SettingsQuery>) -> impl IntoResponse {
+pub(crate) async fn get(Query(q): Query<RobotQuery>) -> impl IntoResponse {
     to_res::<Option<Settings>>(get_settings(&q.robot_id))
 }
 
 pub(crate) async fn save(
-    Query(q): Query<SettingsQuery>,
+    Query(q): Query<RobotQuery>,
     Json(data): Json<Settings>,
 ) -> impl IntoResponse {
     to_res(save_settings(&q.robot_id, &data))
@@ -214,7 +210,7 @@ pub(crate) fn check_smtp_settings(settings: &Settings) -> Result<bool> {
     Ok(mailer.test_connection()?)
 }
 
-pub(crate) async fn download_model_files(Query(q): Query<SettingsQuery>) -> impl IntoResponse {
+pub(crate) async fn download_model_files(Query(q): Query<RobotQuery>) -> impl IntoResponse {
     if let Ok(op) = get_settings(&q.robot_id) {
         if let Some(settings) = op {
             if let crate::intent::embedding::EmbeddingProvider::HuggingFace(m) =
@@ -240,7 +236,7 @@ pub(crate) async fn download_model_progress() -> impl IntoResponse {
     to_res(Ok(r))
 }
 
-pub(crate) async fn check_model_files(Query(q): Query<SettingsQuery>) -> impl IntoResponse {
+pub(crate) async fn check_model_files(Query(q): Query<RobotQuery>) -> impl IntoResponse {
     if let Ok(op) = get_settings(&q.robot_id) {
         if let Some(settings) = op {
             if let embedding::EmbeddingProvider::HuggingFace(m) =

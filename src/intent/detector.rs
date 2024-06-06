@@ -4,18 +4,29 @@ use regex::Regex;
 use super::dto::{Intent, IntentDetail};
 use super::embedding::embedding;
 use crate::db;
+use crate::db_executor;
 use crate::result::{Error, Result};
 
-const SAVING_PATH: &str = "./data/intentev";
+pub(crate) const SAVING_PATH_ROOT: &str = "./data/intentev/";
 
 pub(crate) async fn detect(robot_id: &str, s: &str) -> Result<Option<String>> {
     // let now = std::time::Instant::now();
-    let op: Option<Vec<Intent>> = db::query(super::crud::TABLE, super::crud::INTENT_LIST_KEY)?;
+    let op: Option<Vec<Intent>> = db_executor!(
+        db::query,
+        robot_id,
+        super::crud::TABLE_SUFFIX,
+        super::crud::INTENT_LIST_KEY
+    )?;
     // println!("inner intent detect {:?}", now.elapsed());
     if let Some(r) = op {
         let mut search_vector: Option<Vector> = None;
         for i in r.iter() {
-            let r: Option<IntentDetail> = db::query(super::crud::TABLE, i.id.as_str())?;
+            let r: Option<IntentDetail> = db_executor!(
+                db::query,
+                robot_id,
+                super::crud::TABLE_SUFFIX,
+                i.id.as_str()
+            )?;
             if let Some(detail) = r {
                 for k in detail.keywords.iter() {
                     if k.eq(s) {
@@ -30,7 +41,7 @@ pub(crate) async fn detect(robot_id: &str, s: &str) -> Result<Option<String>> {
                     }
                 }
             }
-            let db = match Database::open(SAVING_PATH) {
+            let db = match Database::open(&format!("{}{}", SAVING_PATH_ROOT, robot_id)) {
                 Ok(db) => db,
                 Err(e) => {
                     log::error!("Failed open database {}", &e);
@@ -80,7 +91,7 @@ pub(crate) async fn save_intent_embedding(
         log::warn!("{}", &err);
         return Err(Error::ErrorWithMessage(err));
     }
-    let mut db = Database::open(SAVING_PATH)?;
+    let mut db = Database::open(&format!("{}{}", SAVING_PATH_ROOT, robot_id))?;
     let mut collection = match db.get_collection(intent_id) {
         Ok(c) => c,
         Err(e) => {
@@ -102,16 +113,16 @@ pub(crate) async fn save_intent_embedding(
     Ok(r.to_usize())
 }
 
-pub(crate) fn delete_intent_embedding(intent_id: &str, id: usize) -> Result<()> {
-    let mut db = Database::open(SAVING_PATH)?;
+pub(crate) fn delete_intent_embedding(robot_id: &str, intent_id: &str, id: usize) -> Result<()> {
+    let mut db = Database::open(&format!("{}{}", SAVING_PATH_ROOT, robot_id))?;
     let mut collection = db.get_collection(intent_id)?;
     collection.delete(&id.into())?;
     db.save_collection(intent_id, &collection)?;
     Ok(())
 }
 
-pub(crate) fn delete_all_embeddings(intent_id: &str) -> Result<()> {
-    let mut db = Database::open(SAVING_PATH)?;
+pub(crate) fn delete_all_embeddings(robot_id: &str, intent_id: &str) -> Result<()> {
+    let mut db = Database::open(&format!("{}{}", SAVING_PATH_ROOT, robot_id))?;
     if let Err(e) = db.delete_collection(intent_id) {
         if !is_col_not_found_err(&e) {
             return Err(e.into());
@@ -130,7 +141,7 @@ pub(crate) fn delete_all_embeddings(intent_id: &str) -> Result<()> {
 // let mut config = Config::default();
 // config.distance = Distance::Cosine;
 // let collection = Collection::build(&config, &records)?;
-// let mut db = Database::open(SAVING_PATH)?;
+// let mut db = Database::open(&format!("{}{}",SAVING_PATH,robot_id))?;
 // db.save_collection(intent_id, &collection)?;
 // Ok(())
 // }

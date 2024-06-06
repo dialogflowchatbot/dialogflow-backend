@@ -1,19 +1,21 @@
 use std::sync::Mutex;
 
-use axum::extract::{Query, Request};
+use axum::extract::Query;
 use axum::http::{header::HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use once_cell::sync::Lazy;
-use redb::TableDefinition;
+// use redb::TableDefinition;
 
 use super::dto::{SubFlowDetail, SubFlowFormData};
 use crate::db;
+use crate::db_executor;
 use crate::flow::demo;
 use crate::result::{Error, Result};
 use crate::web::server::to_res;
 
-pub(crate) const TABLE: TableDefinition<&str, &[u8]> = TableDefinition::new("subflows");
+pub(crate) const TABLE_SUFFIX: &str = "subflows";
+// pub(crate) const TABLE: TableDefinition<&str, &[u8]> = TableDefinition::new("subflows");
 // pub(crate) const SUB_FLOW_LIST_KEY: &str = "subflows";
 static LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
@@ -34,7 +36,14 @@ pub(crate) async fn list(headers: HeaderMap, Query(q): Query<SubFlowFormData>) -
     if template.is_some() {
         return (StatusCode::OK, template.unwrap()).into_response();
     }
-    to_res::<Option<Vec<SubFlowDetail>>>(db::query(TABLE, q.main_flow_id.as_str())).into_response()
+    // to_res::<Option<Vec<SubFlowDetail>>>(db::query(TABLE, q.main_flow_id.as_str())).into_response()
+    to_res::<Option<Vec<SubFlowDetail>>>(db_executor!(
+        db::query,
+        &q.robot_id,
+        TABLE_SUFFIX,
+        q.main_flow_id.as_str()
+    ))
+    .into_response()
     // let r = db::process_data(FLOW_LIST_KEY, |mut flows: Vec<FlowDetail>| {
     //     flows.iter_mut().for_each(|f| f.nodes.clear());
     //     Ok(flows)
@@ -43,7 +52,13 @@ pub(crate) async fn list(headers: HeaderMap, Query(q): Query<SubFlowFormData>) -
 }
 
 pub(crate) async fn simple_list(Query(q): Query<SubFlowFormData>) -> Response {
-    let r: Result<Option<Vec<SubFlowDetail>>> = db::query(TABLE, q.main_flow_id.as_str());
+    // let r: Result<Option<Vec<SubFlowDetail>>> = db::query(TABLE, q.main_flow_id.as_str());
+    let r: Result<Option<Vec<SubFlowDetail>>> = db_executor!(
+        db::query,
+        &q.robot_id,
+        TABLE_SUFFIX,
+        q.main_flow_id.as_str()
+    );
     if let Ok(op) = r {
         if let Some(mut d) = op {
             for f in d.iter_mut() {
@@ -55,9 +70,13 @@ pub(crate) async fn simple_list(Query(q): Query<SubFlowFormData>) -> Response {
     "[]".into_response()
 }
 
-pub(crate) fn new_subflow(mainflow_id: &str, subflow_name: &str) -> Result<Vec<SubFlowDetail>> {
+pub(crate) fn new_subflow(
+    robot_id: &str,
+    mainflow_id: &str,
+    subflow_name: &str,
+) -> Result<Vec<SubFlowDetail>> {
     let _lock = LOCK.lock();
-    db::query(TABLE, mainflow_id)
+    db_executor!(db::query, robot_id, TABLE_SUFFIX, mainflow_id)
         .map(|op: Option<Vec<SubFlowDetail>>| {
             let mut subflow = SubFlowDetail::new(subflow_name);
             let subflows = {
@@ -73,29 +92,42 @@ pub(crate) fn new_subflow(mainflow_id: &str, subflow_name: &str) -> Result<Vec<S
             subflows
         })
         .and_then(|subflows| {
-            db::write(TABLE, mainflow_id, &subflows)?;
+            db_executor!(db::write, robot_id, TABLE_SUFFIX, mainflow_id, &subflows)?;
             Ok(subflows)
         })
 }
 
 pub(crate) async fn new(Query(form): Query<SubFlowFormData>) -> impl IntoResponse {
-    to_res(new_subflow(&form.main_flow_id, &form.data))
+    to_res(new_subflow(&form.robot_id, &form.main_flow_id, &form.data))
 }
 
 pub(crate) async fn save(
-    Query(form): Query<SubFlowFormData>,
+    Query(q): Query<SubFlowFormData>,
     Json(data): Json<SubFlowDetail>,
 ) -> impl IntoResponse {
-    let r: Result<Vec<SubFlowDetail>> = form
+    let r: Result<Vec<SubFlowDetail>> = q
         .data
         .parse::<usize>()
         .map_err(|e| Error::ErrorWithMessage(format!("{:?}", e)))
         .and_then(|idx| {
-            let op: Option<Vec<SubFlowDetail>> = db::query(TABLE, form.main_flow_id.as_str())?;
+            // let op: Option<Vec<SubFlowDetail>> = db::query(TABLE, form.main_flow_id.as_str())?;
+            let op: Option<Vec<SubFlowDetail>> = db_executor!(
+                db::query,
+                &q.robot_id,
+                TABLE_SUFFIX,
+                q.main_flow_id.as_str()
+            )?;
             if let Some(mut flows) = op {
                 if let Some(flow) = flows.get_mut(idx) {
                     flow.canvas = data.canvas.clone();
-                    db::write(TABLE, &form.main_flow_id, &flows)?;
+                    // db::write(TABLE, &q.main_flow_id, &flows)?;
+                    db_executor!(
+                        db::write,
+                        &q.robot_id,
+                        TABLE_SUFFIX,
+                        &q.main_flow_id,
+                        &flows
+                    )?;
                 }
                 Ok(flows)
             } else {
@@ -105,19 +137,29 @@ pub(crate) async fn save(
     to_res(r)
 }
 
-pub(crate) async fn delete(Query(form): Query<SubFlowFormData>) -> impl IntoResponse {
-    let r = form
+pub(crate) async fn delete(Query(q): Query<SubFlowFormData>) -> impl IntoResponse {
+    let r = q
         .data
         .parse::<usize>()
         .map_err(|e| Error::ErrorWithMessage(format!("{:?}", e)))
         .and_then(|idx| {
-            let result: Result<Option<Vec<SubFlowDetail>>> =
-                db::query(TABLE, form.main_flow_id.as_str());
+            let result: Result<Option<Vec<SubFlowDetail>>> = db_executor!(
+                db::query,
+                &q.robot_id,
+                TABLE_SUFFIX,
+                q.main_flow_id.as_str()
+            );
             if let Ok(op) = result {
                 if let Some(mut flows) = op {
                     if idx < flows.len() {
                         flows.remove(idx);
-                        db::write(TABLE, &form.main_flow_id, &flows)?;
+                        db_executor!(
+                            db::write,
+                            &q.robot_id,
+                            TABLE_SUFFIX,
+                            &q.main_flow_id,
+                            &flows
+                        )?;
                     }
                 }
             }
@@ -128,18 +170,25 @@ pub(crate) async fn delete(Query(form): Query<SubFlowFormData>) -> impl IntoResp
 
 pub(crate) async fn release(
     headers: HeaderMap,
-    Query(data): Query<SubFlowFormData>,
+    Query(q): Query<SubFlowFormData>,
 ) -> impl IntoResponse {
     // let now = std::time::Instant::now();
     let client_language = headers
         .get("Accept-Language")
         .map_or_else(|| "", |v| v.to_str().unwrap_or(""));
-    let r = crate::flow::rt::convertor::convert_flow(client_language, &data.main_flow_id);
+    let r = crate::flow::rt::convertor::convert_flow(client_language, &q.robot_id, &q.main_flow_id);
     // println!("release used time:{:?}", now.elapsed());
     to_res(r)
 }
 
-pub(crate) async fn output(Query(data): Query<SubFlowFormData>) -> impl IntoResponse {
-    let flows: Option<Vec<SubFlowDetail>> = db::query(TABLE, data.main_flow_id.as_str()).unwrap();
+pub(crate) async fn output(Query(q): Query<SubFlowFormData>) -> impl IntoResponse {
+    // let flows: Option<Vec<SubFlowDetail>> = db::query(TABLE, q.main_flow_id.as_str()).unwrap();
+    let flows: Option<Vec<SubFlowDetail>> = db_executor!(
+        db::query,
+        &q.robot_id,
+        TABLE_SUFFIX,
+        q.main_flow_id.as_str()
+    )
+    .unwrap();
     serde_json::to_string(&flows).unwrap()
 }

@@ -110,7 +110,7 @@ impl ConditionData {
             }
             ConditionType::FlowVariable => match self.compare_type {
                 CompareType::HasValue => {
-                    if let Ok(op) = variable::get(&self.ref_data) {
+                    if let Ok(op) = variable::get(&req.robot_id, &self.ref_data) {
                         if let Some(v) = op {
                             v.get_value(req, ctx).is_some()
                         } else {
@@ -121,7 +121,7 @@ impl ConditionData {
                     }
                 }
                 CompareType::DoesNotHaveValue => {
-                    if let Ok(op) = variable::get(&self.ref_data) {
+                    if let Ok(op) = variable::get(&req.robot_id, &self.ref_data) {
                         if let Some(v) = op {
                             v.get_value(req, ctx).is_none()
                         } else {
@@ -132,7 +132,7 @@ impl ConditionData {
                     }
                 }
                 CompareType::EmptyString => {
-                    if let Ok(op) = variable::get(&self.ref_data) {
+                    if let Ok(op) = variable::get(&req.robot_id, &self.ref_data) {
                         if let Some(v) = op {
                             if v.var_type == VariableType::Num {
                                 false
@@ -148,7 +148,7 @@ impl ConditionData {
                     }
                 }
                 CompareType::Eq => {
-                    if let Ok(op) = variable::get(&self.ref_data) {
+                    if let Ok(op) = variable::get(&req.robot_id, &self.ref_data) {
                         if let Some(v) = op {
                             if let Some(val) = v.get_value(req, ctx) {
                                 if self.case_sensitive_comparison {
@@ -170,7 +170,7 @@ impl ConditionData {
                     }
                 }
                 CompareType::NotEq => {
-                    if let Ok(op) = variable::get(&self.ref_data) {
+                    if let Ok(op) = variable::get(&req.robot_id, &self.ref_data) {
                         if let Some(v) = op {
                             if let Some(val) = v.get_value(req, ctx) {
                                 if self.case_sensitive_comparison {
@@ -192,7 +192,7 @@ impl ConditionData {
                     }
                 }
                 CompareType::Contains => {
-                    if let Ok(op) = variable::get(&self.ref_data) {
+                    if let Ok(op) = variable::get(&req.robot_id, &self.ref_data) {
                         if let Some(v) = op {
                             if v.var_type == VariableType::Num {
                                 false
@@ -221,7 +221,7 @@ impl ConditionData {
                     }
                 }
                 CompareType::NotContains => {
-                    if let Ok(op) = variable::get(&self.ref_data) {
+                    if let Ok(op) = variable::get(&req.robot_id, &self.ref_data) {
                         if let Some(v) = op {
                             if v.var_type == VariableType::Num {
                                 false
@@ -242,7 +242,7 @@ impl ConditionData {
                     }
                 }
                 CompareType::NGT => {
-                    if let Ok(op) = variable::get(&self.ref_data) {
+                    if let Ok(op) = variable::get(&req.robot_id, &self.ref_data) {
                         if let Some(v) = op {
                             if v.var_type == VariableType::Str {
                                 false
@@ -273,7 +273,7 @@ impl ConditionData {
                     }
                 }
                 CompareType::NGTE => {
-                    if let Ok(op) = variable::get(&self.ref_data) {
+                    if let Ok(op) = variable::get(&req.robot_id, &self.ref_data) {
                         if let Some(v) = op {
                             if v.var_type == VariableType::Str {
                                 false
@@ -302,7 +302,7 @@ impl ConditionData {
                     }
                 }
                 CompareType::NLT => {
-                    if let Ok(op) = variable::get(&self.ref_data) {
+                    if let Ok(op) = variable::get(&req.robot_id, &self.ref_data) {
                         if let Some(v) = op {
                             if v.var_type == VariableType::Str {
                                 false
@@ -331,7 +331,7 @@ impl ConditionData {
                     }
                 }
                 CompareType::NLTE => {
-                    if let Ok(op) = variable::get(&self.ref_data) {
+                    if let Ok(op) = variable::get(&req.robot_id, &self.ref_data) {
                         if let Some(v) = op {
                             if v.var_type == VariableType::Str {
                                 false

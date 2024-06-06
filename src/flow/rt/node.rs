@@ -55,7 +55,7 @@ fn replace_vars(text: &str, req: &Request, ctx: &mut Context) -> Result<String> 
             if let Some(mut end) = text[begin + 1..].find(VAR_WRAP_SYMBOL) {
                 end = begin + end + 1;
                 // println!("{} {} {} {}", &text[begin + 1..],start, begin,end);
-                let var = variable::get(&text[begin + 1..end])?;
+                let var = variable::get(&req.robot_id, &text[begin + 1..end])?;
                 if let Some(v) = var {
                     if let Some(value) = v.get_value(req, ctx) {
                         new_str.push_str(&value.val_to_string());
@@ -218,9 +218,11 @@ pub(crate) struct ExternalHttpCallNode {
 }
 
 impl RuntimeNode for ExternalHttpCallNode {
-    fn exec(&self, _req: &Request, ctx: &mut Context, _response: &mut Response) -> bool {
+    fn exec(&self, req: &Request, ctx: &mut Context, _response: &mut Response) -> bool {
         // println!("Into ExternalHttpCallNode");
-        if let Ok(op) = crate::external::http::crud::get_detail(self.http_api_id.as_str()) {
+        if let Ok(op) =
+            crate::external::http::crud::get_detail(&req.robot_id, self.http_api_id.as_str())
+        {
             if let Some(api) = op {
                 if api.async_req {
                     tokio::spawn(http::req_async(api, ctx.vars.clone(), true));

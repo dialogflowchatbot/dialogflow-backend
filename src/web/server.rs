@@ -18,6 +18,7 @@ use crate::flow::subflow::crud as subflow;
 use crate::intent::crud as intent;
 use crate::man::settings;
 use crate::result::Error;
+use crate::robot::crud as robot;
 use crate::variable::crud as variable;
 
 //https://stackoverflow.com/questions/27840394/how-can-a-rust-program-access-metadata-from-its-cargo-package
@@ -147,6 +148,10 @@ pub async fn start_app() {
 fn gen_router() -> Router {
     Router::new()
         .route(
+            "/robot",
+            get(robot::list).post(robot::save).delete(robot::delete),
+        )
+        .route(
             "/intent",
             get(intent::list).post(intent::add).delete(intent::remove),
         )
@@ -211,7 +216,7 @@ fn gen_router() -> Router {
         .route("/flow/answer", post(rt::answer))
         .route("/version.json", get(version))
         .route("/check-new-version.json", get(check_new_version))
-        .route("/o", get(subflow::output))
+        // .route("/o", get(subflow::output))
         .layer(
             CorsLayer::new()
                 .allow_origin(AllowOrigin::predicate(

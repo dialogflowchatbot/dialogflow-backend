@@ -166,7 +166,9 @@ impl Variable {
                 if cache.is_some() {
                     return self.get_data_from_res(ctx, cache.as_ref().unwrap());
                 }
-                if let Ok(op) = crate::external::http::crud::get_detail(&self.var_associate_data) {
+                if let Ok(op) =
+                    crate::external::http::crud::get_detail(&req.robot_id, &self.var_associate_data)
+                {
                     if let Some(api) = op {
                         return tokio::task::block_in_place(
                             /*move*/
