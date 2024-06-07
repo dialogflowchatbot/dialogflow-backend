@@ -5,14 +5,11 @@ use once_cell::sync::Lazy;
 use redb::ReadableTableMetadata;
 use redb::{Database, ReadableTable, TableDefinition};
 
-use crate::external::http::crud as http;
 use crate::flow::mainflow::crud as mainflow;
 use crate::flow::rt::context;
-use crate::intent::crud as intent;
 use crate::man::settings::{self, GlobalSettings};
 use crate::result::{Error, Result};
 use crate::robot::crud as robot;
-use crate::variable::crud as variable;
 use crate::web::server;
 
 // const TABLE: TableDefinition<&str, &[u8]> = TableDefinition::new("flow");
@@ -56,18 +53,9 @@ pub(crate) fn init() -> Result<GlobalSettings> {
         return Ok(settings::get_global_settings()?.unwrap());
     }
     let settings = settings::init_global()?;
-    let robot_id = robot::init(is_en)?;
-    settings::init(&robot_id)?;
-    // 意图
-    intent::init(&robot_id, is_en)?;
-    // 变量
-    variable::init(&robot_id, is_en)?;
-    // 主流程
-    mainflow::init(&robot_id)?;
+    robot::init(is_en)?;
     // 流程上下文
     context::init()?;
-    // Http 接口
-    http::init(&robot_id)?;
     Ok(settings)
 }
 
@@ -295,9 +283,9 @@ pub(crate) fn save_txn(
             let table_name = format!("{}{}", d.0, d.1);
             let t: redb::TableDefinition<&str, &[u8]> = redb::TableDefinition::new(&table_name);
             let mut table = write_txn.open_table(t)?;
-            match serde_json::to_vec(&d.2) {
+            match serde_json::to_vec(&d.3) {
                 Ok(r) => {
-                    table.insert(d.1, r.as_slice())?;
+                    table.insert(d.2, r.as_slice())?;
                 }
                 Err(e) => {
                     err = Some(Error::ErrorWithMessage(format!("{:?}", e)));

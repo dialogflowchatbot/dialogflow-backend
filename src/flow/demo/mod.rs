@@ -5,15 +5,7 @@ pub(crate) const DEMO_COLLECT_EN: &str = include_str!("demo_collect_en.txt");
 pub(crate) const DEMO_NOTIFY_EN: &str = include_str!("demo_notify_en.txt");
 pub(crate) const DEMO_REPAY_EN: &str = include_str!("demo_repay_en.txt");
 
-use crate::web::server;
-
-pub(crate) fn get_demo<'a>(client_language: &str, name: &'a str) -> Option<&'static str> {
-    let is_en = if !client_language.is_empty() && client_language.starts_with("en") {
-        true
-    } else {
-        *server::IS_EN
-    };
-    // let is_en = *server::IS_EN;
+pub(crate) fn get_demo<'a>(is_en: bool, name: &'a str) -> Option<&'static str> {
     if name.eq("demo-collect") {
         Some(if is_en { DEMO_COLLECT_EN } else { DEMO_COLLECT })
     } else if name.eq("demo-notify") {

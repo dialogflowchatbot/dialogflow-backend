@@ -28,10 +28,10 @@ pub(crate) const TABLE_SUFFIX: &str = "vars";
 //     });
 // );
 
-#[inline]
-fn get_table_name(robot_id: &str) -> String {
-    format!("{}vars", robot_id)
-}
+// #[inline]
+// fn get_table_name(robot_id: &str) -> String {
+//     format!("{}vars", robot_id)
+// }
 
 pub(crate) fn init(robot_id: &str, is_en: bool) -> Result<()> {
     let v = Variable {
@@ -58,11 +58,11 @@ pub(crate) fn init(robot_id: &str, is_en: bool) -> Result<()> {
 pub(crate) async fn list(Query(q): Query<HashMap<String, String>>) -> impl IntoResponse {
     // let result:Result<Vec<Variable>> = db_executor!(db::get_all, "robot_id",);
     // to_res::<Vec<Variable>>(db::get_all(TABLE))
-    if let Some(robot_id) = q.get("robot_id") {
+    if let Some(robot_id) = q.get("robotId") {
         to_res::<Vec<Variable>>(db_executor!(db::get_all, robot_id, TABLE_SUFFIX,))
     } else {
         to_res(Err(Error::ErrorWithMessage(String::from(
-            "Parameter: robot_id is missing.",
+            "Parameter: robotId is missing.",
         ))))
     }
 }
@@ -96,7 +96,7 @@ pub(crate) async fn add(
     to_res(r)
     */
     // to_res(db::write(TABLE, &v.var_name, &v))
-    if let Some(robot_id) = q.get("robot_id") {
+    if let Some(robot_id) = q.get("robotId") {
         to_res(db_executor!(
             db::write,
             robot_id,
@@ -106,7 +106,7 @@ pub(crate) async fn add(
         ))
     } else {
         to_res(Err(Error::ErrorWithMessage(String::from(
-            "Parameter: robot_id is missing.",
+            "Parameter: robotId is missing.",
         ))))
     }
 }
@@ -141,7 +141,7 @@ pub(crate) async fn delete(
     to_res(r)
     */
     // to_res(db::remove(TABLE, v.var_name.as_str()))
-    if let Some(robot_id) = q.get("robot_id") {
+    if let Some(robot_id) = q.get("robotId") {
         to_res(db_executor!(
             db::remove,
             robot_id,
@@ -150,7 +150,7 @@ pub(crate) async fn delete(
         ))
     } else {
         to_res(Err(Error::ErrorWithMessage(String::from(
-            "Parameter: robot_id is missing.",
+            "Parameter: robotId is missing.",
         ))))
     }
 }

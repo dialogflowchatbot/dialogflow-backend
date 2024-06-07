@@ -49,7 +49,7 @@ pub(crate) fn init(robot_id: &str) -> Result<MainFlowDetail> {
 
 pub(crate) async fn list(Query(q): Query<HashMap<String, String>>) -> impl IntoResponse {
     // to_res::<Vec<MainFlowDetail>>(db::get_all(TABLE))
-    if let Some(robot_id) = q.get("robot_id") {
+    if let Some(robot_id) = q.get("robotId") {
         to_res::<Vec<MainFlowDetail>>(db_executor!(db::get_all, robot_id, TABLE_SUFFIX,))
     } else {
         to_res(Err(Error::ErrorWithMessage(String::from(
@@ -62,11 +62,11 @@ pub(crate) async fn new(
     Query(q): Query<HashMap<String, String>>,
     Json(data): Json<MainFlowDetail>,
 ) -> impl IntoResponse {
-    if let Some(robot_id) = q.get("robot_id") {
+    if let Some(robot_id) = q.get("robotId") {
         to_res::<MainFlowDetail>(create_main_flow(robot_id, &data.name))
     } else {
         to_res(Err(Error::ErrorWithMessage(String::from(
-            "Parameter: robot_id is missing.",
+            "Parameter: robotId is missing.",
         ))))
     }
 }
@@ -99,7 +99,7 @@ pub(crate) async fn save(
     Query(q): Query<HashMap<String, String>>,
     Json(data): Json<MainFlowDetail>,
 ) -> impl IntoResponse {
-    if let Some(robot_id) = q.get("robot_id") {
+    if let Some(robot_id) = q.get("robotId") {
         let main_flow = MainFlowDetail {
             id: data.id.clone(),
             name: data.name.clone(),
@@ -114,7 +114,7 @@ pub(crate) async fn save(
         ))
     } else {
         to_res(Err(Error::ErrorWithMessage(String::from(
-            "Parameter: robot_id is missing.",
+            "Parameter: robotId is missing.",
         ))))
     }
 }
@@ -123,7 +123,7 @@ pub(crate) async fn delete(
     Query(q): Query<HashMap<String, String>>,
     Json(data): Json<MainFlowDetail>,
 ) -> impl IntoResponse {
-    if let Some(robot_id) = q.get("robot_id") {
+    if let Some(robot_id) = q.get("robotId") {
         let main_flow_id = data.id.as_str();
         match crate::flow::rt::crud::remove_runtime_nodes(main_flow_id) {
             Ok(_) => to_res(db_executor!(
@@ -136,7 +136,7 @@ pub(crate) async fn delete(
         }
     } else {
         to_res(Err(Error::ErrorWithMessage(String::from(
-            "Parameter: robot_id is missing.",
+            "Parameter: robotId is missing.",
         ))))
     }
 }

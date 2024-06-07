@@ -15,7 +15,7 @@ use crate::web::server::to_res;
 pub(crate) const INTENT_LIST_KEY: &str = "intents";
 // pub(crate) const TABLE: redb::TableDefinition<&str, &[u8]> =
 //     redb::TableDefinition::new(INTENT_LIST_KEY);
-pub(crate) const TABLE_SUFFIX: &str = "vars";
+pub(crate) const TABLE_SUFFIX: &str = "intents";
 
 pub(crate) fn init(robot_id: &str, is_en: bool) -> Result<()> {
     let mut intents: Vec<Intent> = Vec::with_capacity(2);
@@ -142,13 +142,13 @@ pub(crate) fn init(robot_id: &str, is_en: bool) -> Result<()> {
 
 pub(crate) async fn list(Query(q): Query<HashMap<String, String>>) -> impl IntoResponse {
     // let r: Result<Option<Vec<Intent>>> = db::query(TABLE, INTENT_LIST_KEY);
-    if let Some(robot_id) = q.get("robot_id") {
+    if let Some(robot_id) = q.get("robotId") {
         let r: Result<Option<Vec<Intent>>> =
             db_executor!(db::query, robot_id, TABLE_SUFFIX, INTENT_LIST_KEY);
         to_res(r)
     } else {
         to_res(Err(Error::ErrorWithMessage(String::from(
-            "Parameter: robot_id is missing.",
+            "Parameter: robotId is missing.",
         ))))
     }
 }

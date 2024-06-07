@@ -12,7 +12,7 @@ use crate::db;
 use crate::db_executor;
 use crate::flow::demo;
 use crate::result::{Error, Result};
-use crate::web::server::to_res;
+use crate::web::server::{self, to_res};
 
 pub(crate) const TABLE_SUFFIX: &str = "subflows";
 // pub(crate) const TABLE: TableDefinition<&str, &[u8]> = TableDefinition::new("subflows");
@@ -29,10 +29,8 @@ static LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 // }
 
 pub(crate) async fn list(headers: HeaderMap, Query(q): Query<SubFlowFormData>) -> Response {
-    let client_language = headers
-        .get("Accept-Language")
-        .map_or_else(|| "", |v| v.to_str().unwrap_or(""));
-    let template = demo::get_demo(client_language, &q.main_flow_id);
+    let is_en = server::is_en(&headers);
+    let template = demo::get_demo(is_en, &q.main_flow_id);
     if template.is_some() {
         return (StatusCode::OK, template.unwrap()).into_response();
     }
@@ -173,10 +171,8 @@ pub(crate) async fn release(
     Query(q): Query<SubFlowFormData>,
 ) -> impl IntoResponse {
     // let now = std::time::Instant::now();
-    let client_language = headers
-        .get("Accept-Language")
-        .map_or_else(|| "", |v| v.to_str().unwrap_or(""));
-    let r = crate::flow::rt::convertor::convert_flow(client_language, &q.robot_id, &q.main_flow_id);
+    let is_en = server::is_en(&headers);
+    let r = crate::flow::rt::convertor::convert_flow(is_en, &q.robot_id, &q.main_flow_id);
     // println!("release used time:{:?}", now.elapsed());
     to_res(r)
 }

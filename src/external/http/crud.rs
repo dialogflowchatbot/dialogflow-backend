@@ -21,12 +21,12 @@ pub(crate) fn init(robot_id: &str) -> Result<()> {
 
 pub(crate) async fn list(Query(q): Query<HashMap<String, String>>) -> impl IntoResponse {
     // let r: Result<Vec<HttpReqInfo>> = db::get_all(TABLE);
-    if let Some(robot_id) = q.get("robot_id") {
+    if let Some(robot_id) = q.get("robotId") {
         let r: Result<Vec<HttpReqInfo>> = db_executor!(db::get_all, &robot_id, TABLE_SUFFIX,);
         to_res(r)
     } else {
         to_res(Err(Error::ErrorWithMessage(String::from(
-            "Parameter: robot_id is missing.",
+            "Parameter: robotId is missing.",
         ))))
     }
 }
@@ -40,12 +40,12 @@ pub(crate) async fn detail(
     Query(q): Query<HashMap<String, String>>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
-    if let Some(robot_id) = q.get("robot_id") {
+    if let Some(robot_id) = q.get("robotId") {
         let r: Result<Option<HttpReqInfo>> = get_detail(&robot_id, id.as_str());
         to_res(r)
     } else {
         to_res(Err(Error::ErrorWithMessage(String::from(
-            "Parameter: robot_id is missing.",
+            "Parameter: robotId is missing.",
         ))))
     }
 }
@@ -54,7 +54,7 @@ pub(crate) async fn save(
     Query(q): Query<HashMap<String, String>>,
     Json(mut params): Json<HttpReqInfo>,
 ) -> impl IntoResponse {
-    if let Some(robot_id) = q.get("robot_id") {
+    if let Some(robot_id) = q.get("robotId") {
         if params.id.is_empty() || params.id.eq("new") {
             params.id = scru128::new_string();
         }
@@ -62,7 +62,7 @@ pub(crate) async fn save(
         to_res(r)
     } else {
         to_res(Err(Error::ErrorWithMessage(String::from(
-            "Parameter: robot_id is missing.",
+            "Parameter: robotId is missing.",
         ))))
     }
 }
@@ -71,12 +71,12 @@ pub(crate) async fn remove(
     Query(q): Query<HashMap<String, String>>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
-    if let Some(robot_id) = q.get("robot_id") {
+    if let Some(robot_id) = q.get("robotId") {
         let r = db_executor!(db::remove, &robot_id, TABLE_SUFFIX, id.as_str());
         to_res(r)
     } else {
         to_res(Err(Error::ErrorWithMessage(String::from(
-            "Parameter: robot_id is missing.",
+            "Parameter: robotId is missing.",
         ))))
     }
 }

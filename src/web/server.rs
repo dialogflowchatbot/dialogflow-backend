@@ -151,6 +151,7 @@ fn gen_router() -> Router {
             "/robot",
             get(robot::list).post(robot::save).delete(robot::delete),
         )
+        .route("/robot/detail", get(robot::detail))
         .route(
             "/intent",
             get(intent::list).post(intent::add).delete(intent::remove),
@@ -195,6 +196,10 @@ fn gen_router() -> Router {
         .route(
             "/external/http/:id",
             get(http::detail).post(http::save).delete(http::remove),
+        )
+        .route(
+            "/management/global-settings",
+            get(settings::rest_get_global_settings).post(settings::rest_save_global_settings),
         )
         .route(
             "/management/settings",
@@ -374,4 +379,15 @@ where
     let mut header_map = HeaderMap::new();
     header_map.insert(header::CONTENT_TYPE, "application/json".parse().unwrap());
     (StatusCode::OK, header_map, data)
+}
+
+pub(crate) fn is_en(headers: &axum::http::HeaderMap) -> bool {
+    let client_language = headers
+        .get("Accept-Language")
+        .map_or_else(|| "en-US", |v| v.to_str().unwrap_or("en-US"));
+    if !client_language.is_empty() && client_language.starts_with("en") {
+        true
+    } else {
+        *IS_EN
+    }
 }

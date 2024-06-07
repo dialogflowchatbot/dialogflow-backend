@@ -152,6 +152,10 @@ pub(crate) fn get_global_settings() -> Result<Option<GlobalSettings>> {
     db::query(TABLE, SETTINGS_KEY)
 }
 
+pub(crate) async fn rest_get_global_settings() -> impl IntoResponse {
+    to_res(get_global_settings())
+}
+
 pub(crate) fn get_settings(robot_id: &str) -> Result<Option<Settings>> {
     db::query(TABLE, robot_id)
 }
@@ -174,6 +178,12 @@ pub(crate) fn save_global_settings(data: &GlobalSettings) -> Result<()> {
         Error::ErrorWithMessage(String::from("lang.settings.invalidIp"))
     })?;
     db::write(TABLE, SETTINGS_KEY, &data)
+}
+
+pub(crate) async fn rest_save_global_settings(
+    Json(data): Json<GlobalSettings>,
+) -> impl IntoResponse {
+    to_res(save_global_settings(&data))
 }
 
 pub(crate) fn save_settings(robot_id: &str, data: &Settings) -> Result<()> {
