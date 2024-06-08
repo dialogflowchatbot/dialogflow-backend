@@ -1,3 +1,5 @@
+use std::fs::DirEntry;
+use std::path::Path;
 use std::vec::Vec;
 
 use axum::extract::Query;
@@ -82,12 +84,45 @@ pub(crate) async fn delete(Query(q): Query<RobotQuery>) -> impl IntoResponse {
     to_res(purge(&q.robot_id))
 }
 
+fn delete_entry(entry: &DirEntry) -> Result<()> {
+    log::info!("Deleting file {:?}", entry.path());
+    std::fs::remove_file(entry.path())?;
+    Ok(())
+}
+
+fn delete_dirs(dir: &Path, cb: &dyn Fn(&DirEntry) -> Result<()>) -> Result<()> {
+    if dir.is_dir() {
+        for entry in std::fs::read_dir(dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.is_dir() {
+                delete_dirs(&path, cb)?;
+                log::info!("Deleting dir {:?}", &path);
+                std::fs::remove_dir(path)?;
+            } else {
+                cb(&entry)?;
+            }
+        }
+    }
+    Ok(())
+}
+
 fn purge(robot_id: &str) -> Result<()> {
-    std::fs::remove_dir(format!(
-        "{}{}",
-        crate::intent::detector::SAVING_PATH_ROOT,
-        robot_id
-    ))?;
+    let root = &format!("{}{}", crate::intent::detector::SAVING_PATH_ROOT, robot_id);
+    let path = Path::new(&root);
+    if path.exists() {
+        delete_dirs(&path, &delete_entry)?;
+        std::fs::remove_dir(path)?;
+    }
+    // if let Err(e) = std::fs::remove_dir(format!(
+    //     "{}{}",
+    //     crate::intent::detector::SAVING_PATH_ROOT,
+    //     robot_id
+    // )) {
+    //     if e.kind() != std::io::ErrorKind::NotFound {
+    //         return Err(e.into());
+    //     }
+    // }
     db::remove(crate::man::settings::TABLE, robot_id)?;
     db_executor!(
         db::delete_table,
@@ -122,5 +157,5 @@ fn purge(robot_id: &str) -> Result<()> {
         robot_id,
         crate::flow::mainflow::crud::TABLE_SUFFIX,
     )?;
-    Ok(())
+    db::remove(TABLE, robot_id)
 }
