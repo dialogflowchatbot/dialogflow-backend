@@ -25,8 +25,8 @@ pub(crate) struct GlobalSettings {
 
 #[derive(Deserialize, Serialize)]
 pub(crate) struct Settings {
-    #[serde(rename = "maxSessionDurationMin")]
-    pub(crate) max_session_duration_min: u16,
+    #[serde(rename = "maxSessionIdleSec")]
+    pub(crate) max_session_idle_sec: u32,
     #[serde(rename = "embeddingProvider")]
     pub(crate) embedding_provider: EmbeddingProvider,
     #[serde(rename = "smtpHost")]
@@ -101,7 +101,7 @@ impl Default for GlobalSettings {
 impl Default for Settings {
     fn default() -> Self {
         Settings {
-            max_session_duration_min: 30,
+            max_session_idle_sec: 1800,
             embedding_provider: EmbeddingProvider {
                 provider: embedding::EmbeddingProvider::HuggingFace(
                     embedding::HuggingFaceModel::AllMiniLML6V2,

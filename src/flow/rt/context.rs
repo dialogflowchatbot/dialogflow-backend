@@ -1,5 +1,6 @@
 use std::collections::{HashMap, LinkedList};
 // use std::rc::Rc;
+use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::vec::Vec;
 
@@ -9,20 +10,22 @@ use tokio::time::{interval, Duration};
 
 use super::node::RuntimeNnodeEnum;
 use crate::db;
+use crate::man::settings;
 use crate::result::Result;
 use crate::variable::dto::VariableValue;
 
 const TABLE: redb::TableDefinition<&str, &[u8]> = redb::TableDefinition::new("contexts");
 pub(crate) const CONTEXT_KEY: &str = "contexts";
+// const LOCKER: OnceLock<Mutex<()>> = OnceLock::new();
 
-#[derive(Deserialize, Serialize)]
-pub(crate) struct ContextStatus {
-    session_id: String,
-    create_time: u64,
-}
+// #[derive(Deserialize, Serialize)]
+// pub(crate) struct ContextStatus {
+//     session_id: String,
+// }
 
 #[derive(Deserialize, Serialize)]
 pub(crate) struct Context {
+    robot_id: String,
     pub(in crate::flow::rt) main_flow_id: String,
     session_id: String,
     pub(in crate::flow::rt) nodes: LinkedList<String>,
@@ -31,38 +34,42 @@ pub(crate) struct Context {
     pub(crate) none_persistent_vars: HashMap<String, VariableValue>,
     #[serde(skip)]
     pub(crate) none_persistent_data: HashMap<String, String>,
+    last_active_time: u64,
 }
 
 impl Context {
-    pub(crate) fn get(session_id: &str) -> Self {
-        if let Ok(o) = db::query(TABLE, session_id) {
-            if let Some(ctx) = o {
+    pub(crate) fn get(robot_id: &str, session_id: &str) -> Self {
+        let r: Result<Option<Context>> = db::query(TABLE, session_id);
+        if let Ok(o) = r {
+            if let Some(mut ctx) = o {
+                ctx.last_active_time = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs();
                 return ctx;
             }
         }
-        let r: Result<Option<Vec<ContextStatus>>> = db::query(TABLE, CONTEXT_KEY);
+        let r: Result<Option<Vec<String>>> = db::query(TABLE, CONTEXT_KEY);
         if let Ok(op) = r {
             if let Some(mut d) = op {
-                let ctx = ContextStatus {
-                    session_id: String::from(session_id),
-                    create_time: SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .unwrap()
-                        .as_secs(),
-                };
-                d.push(ctx);
+                d.push(String::from(session_id));
                 if let Err(e) = db::write(TABLE, CONTEXT_KEY, &d) {
                     eprint!("{:?}", e);
                 }
             }
         }
         let ctx = Self {
+            robot_id: String::from(robot_id),
             main_flow_id: String::with_capacity(64),
             session_id: String::from(session_id),
             nodes: LinkedList::new(),
             vars: HashMap::with_capacity(16),
             none_persistent_vars: HashMap::with_capacity(16),
             none_persistent_data: HashMap::with_capacity(16),
+            last_active_time: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
         };
         ctx
     }
@@ -107,15 +114,45 @@ impl Context {
 }
 
 pub(crate) fn init() -> Result<()> {
-    db::write(TABLE, CONTEXT_KEY, &String::from("[]"))
+    let d: Vec<String> = vec![];
+    db::write(TABLE, CONTEXT_KEY, &d)
 }
 
-pub async fn clean_expired_session(
-    mut recv: tokio::sync::oneshot::Receiver<()>,
-    max_session_duration_min: u16,
-) {
-    let max_sess_dur_sec = (max_session_duration_min * 60) as u64;
-    let mut interval = interval(Duration::from_secs(max_sess_dur_sec));
+fn session_not_expired(d: &mut Vec<String>, idx: usize, now: u64) -> Result<bool> {
+    let session_id = d[idx].as_str();
+    // let session_id_ref:&str =session_id.as_ref();
+    let ctx: Option<Context> = db::query(TABLE, session_id)?;
+    if ctx.is_none() {
+        d.remove(idx);
+        return Ok(false);
+    }
+    let c = ctx.as_ref().unwrap();
+    let settings = settings::get_settings(&c.robot_id)?;
+    if settings.is_none() {
+        if let Err(e) = db::remove(TABLE, session_id) {
+            log::warn!("Discarding expired session {} failed {:?}", session_id, e);
+        } else {
+            d.remove(idx);
+        }
+        return Ok(false);
+    }
+    if now - c.last_active_time
+        > 86400u64 /* 1 day */
+            .min(settings.as_ref().unwrap().max_session_idle_sec as u64)
+    {
+        if let Err(e) = db::remove(TABLE, session_id) {
+            log::warn!("Discarding expired session {} failed {:?}", session_id, e);
+        } else {
+            log::info!("Discarded expired session: {}", session_id);
+            d.remove(idx);
+        }
+        return Ok(false);
+    }
+    Ok(true)
+}
+
+pub async fn clean_expired_session(mut recv: tokio::sync::oneshot::Receiver<()>) {
+    let mut interval = interval(Duration::from_secs(60));
     loop {
         // https://docs.rs/tokio/latest/tokio/sync/oneshot/index.html
         // https://users.rust-lang.org/t/how-can-i-terminate-a-tokio-task-even-if-its-not-finished/40641
@@ -127,35 +164,26 @@ pub async fn clean_expired_session(
           }
         }
         // sleep(Duration::from_millis(1800000)).await;
-        log::info!("Cleaning expired sessions");
-        let r: Result<Option<Vec<ContextStatus>>> = db::query(TABLE, CONTEXT_KEY);
-        if let Ok(op) = r {
-            if let Some(mut d) = op {
-                match SystemTime::now().duration_since(UNIX_EPOCH) {
-                    Ok(dura) => {
-                        let now = dura.as_secs();
-                        let mut i = 0;
-                        while i < d.len() {
-                            // println!("{} {}", now, d[i].create_time);
-                            if now - d[i].create_time > max_sess_dur_sec {
-                                let val = d.remove(i);
-                                if let Err(e) = db::remove(TABLE, val.session_id.as_str()) {
-                                    log::error!(
-                                        "Removing expired session {} failed {:?}",
-                                        val.session_id,
-                                        e
-                                    );
-                                }
-                            } else {
-                                i += 1;
-                            }
-                        }
-                        if let Err(e) = db::write(TABLE, CONTEXT_KEY, &d) {
-                            log::error!("{:?}", e);
+        // log::info!("Cleaning expired sessions");
+        let r: Option<Vec<String>> = db::query(TABLE, CONTEXT_KEY)
+            .expect("Please remove ./data/flow.db file and restart this application.");
+        if let Some(mut d) = r {
+            match SystemTime::now().duration_since(UNIX_EPOCH) {
+                Ok(dura) => {
+                    let now = dura.as_secs();
+                    let mut i = 0;
+                    while i < d.len() {
+                        // println!("{} {}", now, d[i].create_time);
+                        let session_not_expired = session_not_expired(&mut d, i, now);
+                        if session_not_expired.is_ok() && session_not_expired.unwrap() {
+                            i += 1;
                         }
                     }
-                    Err(e) => log::error!("{:?}", e),
+                    if let Err(e) = db::write(TABLE, CONTEXT_KEY, &d) {
+                        log::error!("{:?}", e);
+                    }
                 }
+                Err(e) => log::error!("{:?}", e),
             }
         }
     }

@@ -6,7 +6,10 @@ use crate::result::{Error, Result};
 
 pub(in crate::flow::rt) async fn process(req: &mut Request) -> Result<Response> {
     // let now = std::time::Instant::now();
-    let mut ctx = Context::get(&req.session_id);
+    if req.session_id.is_empty() {
+        req.session_id = scru128::new_string();
+    }
+    let mut ctx = Context::get(&req.robot_id, &req.session_id);
     // println!("get ctx {:?}", now.elapsed());
     // let now = std::time::Instant::now();
     if ctx.no_node() {
@@ -37,7 +40,7 @@ pub(in crate::flow::rt) async fn process(req: &mut Request) -> Result<Response> 
 }
 
 pub(in crate::flow::rt) fn exec(req: &Request, ctx: &mut Context) -> Result<Response> {
-    let mut response = Response::new();
+    let mut response = Response::new(req);
     for _i in 0..100 {
         // let now = std::time::Instant::now();
         if let Some(n) = ctx.pop_node() {

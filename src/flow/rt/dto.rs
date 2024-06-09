@@ -30,6 +30,7 @@ pub(crate) struct Request {
 
 #[derive(Serialize)]
 pub(crate) struct CollectData {
+    #[serde(rename = "varName")]
     pub(crate) var_name: String,
     pub(crate) value: String,
 }
@@ -49,6 +50,8 @@ pub(crate) struct AnswerData {
 
 #[derive(Serialize)]
 pub(crate) struct Response {
+    #[serde(rename = "sessionId")]
+    pub(crate) session_id: String,
     pub(crate) answers: Vec<AnswerData>,
     #[serde(rename = "collectData")]
     pub(crate) collect_data: Vec<CollectData>,
@@ -59,8 +62,9 @@ pub(crate) struct Response {
 }
 
 impl Response {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(req: &Request) -> Self {
         Self {
+            session_id: req.session_id.clone(),
             answers: Vec::with_capacity(5),
             collect_data: Vec::with_capacity(10),
             next_action: NextActionType::None,

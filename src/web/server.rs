@@ -84,7 +84,7 @@ pub async fn start_app() {
     }
 
     let (sender, recv) = tokio::sync::oneshot::channel::<()>();
-    tokio::spawn(crate::flow::rt::context::clean_expired_session(recv, 30));
+    tokio::spawn(crate::flow::rt::context::clean_expired_session(recv));
 
     let r: Router = gen_router();
     let app = r.fallback(fallback);
