@@ -129,7 +129,7 @@ fn convert_subflow(mainflow_id: &str, flow_idx: usize, f: &SubFlowDetail) -> Res
                         branch.target_node_id = t;
                     } else {
                         return Err(Error::ErrorWithMessage(format!(
-                            "Branch '{}' of '{}' id information not found",
+                            "Branch '{}' of '{}' target id information not found",
                             branch.branch_name, f.name
                         )));
                     }

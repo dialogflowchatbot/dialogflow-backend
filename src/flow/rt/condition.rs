@@ -47,6 +47,46 @@ pub(crate) enum CompareType {
 pub(crate) enum TargetDataVariant {
     Const,
     Variable,
+    TextZeroShotClassification,
+}
+
+// #[macro_export]
+macro_rules! compare_numbers {
+    ($req: expr, $ctx: expr, $ref_data: expr, $comparsion: tt, $self: ident) => ({
+        let r = variable::get(&$req.robot_id, $ref_data);
+        if r.is_err() {
+            log::error!("err");
+            return false;
+        }
+        let v = r.unwrap();
+        if v.is_none() {
+            return false;
+        }
+        let v = v.unwrap();
+        if v.var_type == VariableType::Str {
+            return false;
+        }
+        let val = v.get_value($req, $ctx);
+        if val.is_none() {
+            return false;
+        }
+        let val = val.unwrap();
+        let n1 = match BigDecimal::from_str(&val.val_to_string()) {
+            Ok(n) => n,
+            Err(e) => {
+                log::warn!("{:?}",&e);
+                return false;
+            }
+        };
+        let n2 = match BigDecimal::from_str(&$self.get_target_data($req, $ctx)) {
+            Ok(n) => n,
+            Err(e) => {
+                log::warn!("{:?}",&e);
+                return false;
+            }
+        };
+        n1 $comparsion n2
+    });
 }
 
 #[derive(Clone, Deserialize, Serialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
@@ -65,6 +105,12 @@ impl ConditionData {
         match self.target_data_variant {
             TargetDataVariant::Const => self.target_data.clone(),
             TargetDataVariant::Variable => variable::get_value(&self.target_data, req, ctx),
+            TargetDataVariant::TextZeroShotClassification => {
+                //todo
+                //do text zero shot classification of user input
+                //and try matching label (from self.ref_data) and get a score
+                String::new()
+            }
         }
     }
     pub(in crate::flow::rt) fn compare(&self, req: &Request, ctx: &mut Context) -> bool {
@@ -242,122 +288,126 @@ impl ConditionData {
                     }
                 }
                 CompareType::NGT => {
-                    if let Ok(op) = variable::get(&req.robot_id, &self.ref_data) {
-                        if let Some(v) = op {
-                            if v.var_type == VariableType::Str {
-                                false
-                            } else {
-                                if let Some(val) = v.get_value(req, ctx) {
-                                    if let Ok(n1) = BigDecimal::from_str(&val.val_to_string()) {
-                                        // println!("get_target_data {} {:?} |{}|", self.target_data, self.target_data_variant, self.get_target_data(req, ctx));
-                                        if let Ok(n2) =
-                                            BigDecimal::from_str(&self.get_target_data(req, ctx))
-                                        {
-                                            // println!("{} {}", n1, n2);
-                                            n1 > n2
-                                        } else {
-                                            false
-                                        }
-                                    } else {
-                                        false
-                                    }
-                                } else {
-                                    false
-                                }
-                            }
-                        } else {
-                            false
-                        }
-                    } else {
-                        false
-                    }
+                    compare_numbers!(req, ctx, &self.ref_data, >, self)
+                    // if let Ok(op) = variable::get(&req.robot_id, &self.ref_data) {
+                    //     if let Some(v) = op {
+                    //         if v.var_type == VariableType::Str {
+                    //             false
+                    //         } else {
+                    //             if let Some(val) = v.get_value(req, ctx) {
+                    //                 if let Ok(n1) = BigDecimal::from_str(&val.val_to_string()) {
+                    //                     // println!("get_target_data {} {:?} |{}|", self.target_data, self.target_data_variant, self.get_target_data(req, ctx));
+                    //                     if let Ok(n2) =
+                    //                         BigDecimal::from_str(&self.get_target_data(req, ctx))
+                    //                     {
+                    //                         // println!("{} {}", n1, n2);
+                    //                         n1 > n2
+                    //                     } else {
+                    //                         false
+                    //                     }
+                    //                 } else {
+                    //                     false
+                    //                 }
+                    //             } else {
+                    //                 false
+                    //             }
+                    //         }
+                    //     } else {
+                    //         false
+                    //     }
+                    // } else {
+                    //     false
+                    // }
                 }
                 CompareType::NGTE => {
-                    if let Ok(op) = variable::get(&req.robot_id, &self.ref_data) {
-                        if let Some(v) = op {
-                            if v.var_type == VariableType::Str {
-                                false
-                            } else {
-                                if let Some(val) = v.get_value(req, ctx) {
-                                    if let Ok(n1) = BigDecimal::from_str(&val.val_to_string()) {
-                                        if let Ok(n2) =
-                                            BigDecimal::from_str(&self.get_target_data(req, ctx))
-                                        {
-                                            n1 >= n2
-                                        } else {
-                                            false
-                                        }
-                                    } else {
-                                        false
-                                    }
-                                } else {
-                                    false
-                                }
-                            }
-                        } else {
-                            false
-                        }
-                    } else {
-                        false
-                    }
+                    compare_numbers!(req, ctx, &self.ref_data, >=, self)
+                    // if let Ok(op) = variable::get(&req.robot_id, &self.ref_data) {
+                    //     if let Some(v) = op {
+                    //         if v.var_type == VariableType::Str {
+                    //             false
+                    //         } else {
+                    //             if let Some(val) = v.get_value(req, ctx) {
+                    //                 if let Ok(n1) = BigDecimal::from_str(&val.val_to_string()) {
+                    //                     if let Ok(n2) =
+                    //                         BigDecimal::from_str(&self.get_target_data(req, ctx))
+                    //                     {
+                    //                         n1 >= n2
+                    //                     } else {
+                    //                         false
+                    //                     }
+                    //                 } else {
+                    //                     false
+                    //                 }
+                    //             } else {
+                    //                 false
+                    //             }
+                    //         }
+                    //     } else {
+                    //         false
+                    //     }
+                    // } else {
+                    //     false
+                    // }
                 }
                 CompareType::NLT => {
-                    if let Ok(op) = variable::get(&req.robot_id, &self.ref_data) {
-                        if let Some(v) = op {
-                            if v.var_type == VariableType::Str {
-                                false
-                            } else {
-                                if let Some(val) = v.get_value(req, ctx) {
-                                    if let Ok(n1) = BigDecimal::from_str(&val.val_to_string()) {
-                                        if let Ok(n2) =
-                                            BigDecimal::from_str(&self.get_target_data(req, ctx))
-                                        {
-                                            n1 < n2
-                                        } else {
-                                            false
-                                        }
-                                    } else {
-                                        false
-                                    }
-                                } else {
-                                    false
-                                }
-                            }
-                        } else {
-                            false
-                        }
-                    } else {
-                        false
-                    }
+                    compare_numbers!(req, ctx, &self.ref_data, <, self)
+                    // if let Ok(op) = variable::get(&req.robot_id, &self.ref_data) {
+                    //     if let Some(v) = op {
+                    //         if v.var_type == VariableType::Str {
+                    //             false
+                    //         } else {
+                    //             if let Some(val) = v.get_value(req, ctx) {
+                    //                 if let Ok(n1) = BigDecimal::from_str(&val.val_to_string()) {
+                    //                     if let Ok(n2) =
+                    //                         BigDecimal::from_str(&self.get_target_data(req, ctx))
+                    //                     {
+                    //                         n1 < n2
+                    //                     } else {
+                    //                         false
+                    //                     }
+                    //                 } else {
+                    //                     false
+                    //                 }
+                    //             } else {
+                    //                 false
+                    //             }
+                    //         }
+                    //     } else {
+                    //         false
+                    //     }
+                    // } else {
+                    //     false
+                    // }
                 }
                 CompareType::NLTE => {
-                    if let Ok(op) = variable::get(&req.robot_id, &self.ref_data) {
-                        if let Some(v) = op {
-                            if v.var_type == VariableType::Str {
-                                false
-                            } else {
-                                if let Some(val) = v.get_value(req, ctx) {
-                                    if let Ok(n1) = BigDecimal::from_str(&val.val_to_string()) {
-                                        if let Ok(n2) =
-                                            BigDecimal::from_str(&self.get_target_data(req, ctx))
-                                        {
-                                            n1 <= n2
-                                        } else {
-                                            false
-                                        }
-                                    } else {
-                                        false
-                                    }
-                                } else {
-                                    false
-                                }
-                            }
-                        } else {
-                            false
-                        }
-                    } else {
-                        false
-                    }
+                    compare_numbers!(req, ctx, &self.ref_data, <=, self)
+                    // if let Ok(op) = variable::get(&req.robot_id, &self.ref_data) {
+                    //     if let Some(v) = op {
+                    //         if v.var_type == VariableType::Str {
+                    //             false
+                    //         } else {
+                    //             if let Some(val) = v.get_value(req, ctx) {
+                    //                 if let Ok(n1) = BigDecimal::from_str(&val.val_to_string()) {
+                    //                     if let Ok(n2) =
+                    //                         BigDecimal::from_str(&self.get_target_data(req, ctx))
+                    //                     {
+                    //                         n1 <= n2
+                    //                     } else {
+                    //                         false
+                    //                     }
+                    //                 } else {
+                    //                     false
+                    //                 }
+                    //             } else {
+                    //                 false
+                    //             }
+                    //         }
+                    //     } else {
+                    //         false
+                    //     }
+                    // } else {
+                    //     false
+                    // }
                 }
                 // let mut n = false;
                 // if let Ok(r) = variable::get(&self.ref_data) {
