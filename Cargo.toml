@@ -20,7 +20,7 @@ bigdecimal = "0.4"
 # candle-core = { git = "https://github.com/huggingface/candle.git", version = "0.5.1" }
 candle = { version = "0.5", package = "candle-core", default-features = false }
 candle-nn = "0.5"
-candle-onnx = "0.5"
+# candle-onnx = "0.5"
 candle-transformers = "0.5"
 tokenizers = "0.19"
 # candle_embed = "0.1"
