@@ -6,8 +6,8 @@ use axum::response::IntoResponse;
 use axum::Json;
 use serde::{Deserialize, Serialize};
 
+use crate::ai::{completion, embedding, huggingface};
 use crate::db;
-use crate::intent::embedding;
 use crate::result::{Error, Result};
 use crate::robot::dto::RobotQuery;
 use crate::web::server::{self, to_res};
@@ -27,8 +27,10 @@ pub(crate) struct GlobalSettings {
 pub(crate) struct Settings {
     #[serde(rename = "maxSessionIdleSec")]
     pub(crate) max_session_idle_sec: u32,
-    #[serde(rename = "embeddingProvider")]
-    pub(crate) embedding_provider: EmbeddingProvider,
+    #[serde(rename = "textGenerateProvider")]
+    pub(crate) text_generate_provider: TextGenerateProvider,
+    #[serde(rename = "sentenceEmbeddingProvider")]
+    pub(crate) sentence_embedding_provider: SentenceEmbeddingProvider,
     #[serde(rename = "smtpHost")]
     pub(crate) smtp_host: String,
     #[serde(rename = "smtpUsername")]
@@ -75,8 +77,24 @@ pub(crate) struct Settings {
 // }
 
 #[derive(Deserialize, Serialize)]
-pub(crate) struct EmbeddingProvider {
-    pub(crate) provider: crate::intent::embedding::EmbeddingProvider,
+pub(crate) struct TextGenerateProvider {
+    pub(crate) provider: completion::TextGenerateProvider,
+    #[serde(rename = "apiUrl")]
+    pub(crate) api_url: String,
+    #[serde(rename = "apiKey")]
+    pub(crate) api_key: String,
+    #[serde(rename = "systemHint")]
+    pub(crate) system_hint: String,
+    pub(crate) model: String,
+    #[serde(rename = "connectTimeoutMillis")]
+    pub(crate) connect_timeout_millis: u16,
+    #[serde(rename = "readTimeoutMillis")]
+    pub(crate) read_timeout_millis: u16,
+}
+
+#[derive(Deserialize, Serialize)]
+pub(crate) struct SentenceEmbeddingProvider {
+    pub(crate) provider: embedding::SentenceEmbeddingProvider,
     #[serde(rename = "apiUrl")]
     pub(crate) api_url: String,
     #[serde(rename = "apiKey")]
@@ -102,9 +120,20 @@ impl Default for Settings {
     fn default() -> Self {
         Settings {
             max_session_idle_sec: 1800,
-            embedding_provider: EmbeddingProvider {
-                provider: embedding::EmbeddingProvider::HuggingFace(
-                    embedding::HuggingFaceModel::AllMiniLML6V2,
+            text_generate_provider: TextGenerateProvider {
+                provider: completion::TextGenerateProvider::HuggingFace(
+                    huggingface::HuggingFaceModel::AllMiniLML6V2,
+                ),
+                api_url: String::new(),
+                api_key: String::new(),
+                system_hint: String::new(),
+                model: String::new(),
+                connect_timeout_millis: 1500,
+                read_timeout_millis: 3000,
+            },
+            sentence_embedding_provider: SentenceEmbeddingProvider {
+                provider: embedding::SentenceEmbeddingProvider::HuggingFace(
+                    huggingface::HuggingFaceModel::AllMiniLML6V2,
                 ),
                 api_url: String::new(),
                 api_key: String::new(),
@@ -187,8 +216,10 @@ pub(crate) async fn rest_save_global_settings(
 }
 
 pub(crate) fn save_settings(robot_id: &str, data: &Settings) -> Result<()> {
-    if let embedding::EmbeddingProvider::HuggingFace(m) = &data.embedding_provider.provider {
-        match crate::intent::embedding::load_model_files(&m.get_info().repository) {
+    if let embedding::SentenceEmbeddingProvider::HuggingFace(m) =
+        &data.sentence_embedding_provider.provider
+    {
+        match crate::ai::embedding::load_model_files(&m.get_info().repository) {
             Ok(m) => embedding::replace_model_cache(m),
             Err(e) => {
                 log::warn!("Hugging face model files incorrect. Err: {:?}", &e);
@@ -223,11 +254,11 @@ pub(crate) fn check_smtp_settings(settings: &Settings) -> Result<bool> {
 pub(crate) async fn download_model_files(Query(q): Query<RobotQuery>) -> impl IntoResponse {
     if let Ok(op) = get_settings(&q.robot_id) {
         if let Some(settings) = op {
-            if let crate::intent::embedding::EmbeddingProvider::HuggingFace(m) =
-                settings.embedding_provider.provider
+            if let embedding::SentenceEmbeddingProvider::HuggingFace(m) =
+                settings.sentence_embedding_provider.provider
             {
-                let r = crate::intent::embedding::download_hf_models(&m.get_info()).await;
-                if let Some(s) = crate::intent::embedding::DOWNLOAD_STATUS.get() {
+                let r = huggingface::download_hf_models(&m.get_info()).await;
+                if let Some(s) = huggingface::DOWNLOAD_STATUS.get() {
                     if let Ok(mut v) = s.lock() {
                         v.downloading = false;
                     }
@@ -242,15 +273,15 @@ pub(crate) async fn download_model_files(Query(q): Query<RobotQuery>) -> impl In
 }
 
 pub(crate) async fn download_model_progress() -> impl IntoResponse {
-    let r = crate::intent::embedding::get_download_status();
+    let r = huggingface::get_download_status();
     to_res(Ok(r))
 }
 
 pub(crate) async fn check_model_files(Query(q): Query<RobotQuery>) -> impl IntoResponse {
     if let Ok(op) = get_settings(&q.robot_id) {
         if let Some(settings) = op {
-            if let embedding::EmbeddingProvider::HuggingFace(m) =
-                &settings.embedding_provider.provider
+            if let embedding::SentenceEmbeddingProvider::HuggingFace(m) =
+                &settings.sentence_embedding_provider.provider
             {
                 let r = match embedding::load_model_files(&m.get_info().repository) {
                     Ok(_) => Ok(()),

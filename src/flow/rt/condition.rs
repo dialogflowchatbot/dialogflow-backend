@@ -47,7 +47,7 @@ pub(crate) enum CompareType {
 pub(crate) enum TargetDataVariant {
     Const,
     Variable,
-    TextZeroShotClassification,
+    ZeroShotTextClassification,
 }
 
 // #[macro_export]
@@ -105,7 +105,7 @@ impl ConditionData {
         match self.target_data_variant {
             TargetDataVariant::Const => self.target_data.clone(),
             TargetDataVariant::Variable => variable::get_value(&self.target_data, req, ctx),
-            TargetDataVariant::TextZeroShotClassification => {
+            TargetDataVariant::ZeroShotTextClassification => {
                 //todo
                 //do text zero shot classification of user input
                 //and try matching label (from self.ref_data) and get a score

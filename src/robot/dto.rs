@@ -8,8 +8,8 @@ pub(crate) struct RobotQuery {
 
 #[derive(Deserialize, Serialize)]
 pub(crate) enum RobotType {
-    InboundBot,
-    OutboundBot,
+    InboundCallBot,
+    OutboundCallBot,
     TextBot,
 }
 

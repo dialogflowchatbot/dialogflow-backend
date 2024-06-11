@@ -1,6 +1,7 @@
 // #[global_allocator]
 // static ALLOC: snmalloc_rs::SnMalloc = snmalloc_rs::SnMalloc;
 
+pub(crate) mod ai;
 pub(crate) mod db;
 pub(crate) mod external;
 pub(crate) mod flow;

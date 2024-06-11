@@ -2,7 +2,7 @@ use oasysdb::prelude::*;
 use regex::Regex;
 
 use super::dto::{Intent, IntentDetail};
-use super::embedding::embedding;
+use crate::ai::embedding::embedding;
 use crate::db;
 use crate::db_executor;
 use crate::result::{Error, Result};
