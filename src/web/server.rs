@@ -215,7 +215,7 @@ fn gen_router() -> Router {
         )
         .route(
             "/management/settings/model/check",
-            get(settings::check_model_files),
+            post(settings::check_model_files),
         )
         .route("/management/settings/smtp/test", post(settings::smtp_test))
         .route("/flow/answer", post(rt::answer))

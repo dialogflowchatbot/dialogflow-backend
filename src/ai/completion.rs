@@ -15,14 +15,14 @@ pub(crate) enum TextGenerateProvider {
     Ollama(String),
 }
 
-pub(crate) async fn completion(robot_id: &str, s: &str) -> Result<String> {
+pub(crate) async fn completion(robot_id: &str, system_hint: &str, s: &str) -> Result<String> {
     if let Some(settings) = settings::get_settings(robot_id)? {
         match settings.sentence_embedding_provider.provider {
             SentenceEmbeddingProvider::HuggingFace(m) => todo!(),
             SentenceEmbeddingProvider::OpenAI(m) => {
                 open_ai(
                     &m,
-                    &settings.text_generate_provider.system_hint,
+                    system_hint,
                     s,
                     settings.sentence_embedding_provider.connect_timeout_millis,
                     settings.sentence_embedding_provider.read_timeout_millis,

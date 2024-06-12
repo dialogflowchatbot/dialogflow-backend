@@ -1,10 +1,12 @@
 use std::default::Default;
 use std::net::SocketAddr;
 
+use axum::body::Bytes;
 use axum::extract::Query;
 use axum::response::IntoResponse;
 use axum::Json;
 use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
 
 use crate::ai::{completion, embedding, huggingface};
 use crate::db;
@@ -83,8 +85,6 @@ pub(crate) struct TextGenerateProvider {
     pub(crate) api_url: String,
     #[serde(rename = "apiKey")]
     pub(crate) api_key: String,
-    #[serde(rename = "systemHint")]
-    pub(crate) system_hint: String,
     pub(crate) model: String,
     #[serde(rename = "connectTimeoutMillis")]
     pub(crate) connect_timeout_millis: u16,
@@ -126,7 +126,6 @@ impl Default for Settings {
                 ),
                 api_url: String::new(),
                 api_key: String::new(),
-                system_hint: String::new(),
                 model: String::new(),
                 connect_timeout_millis: 1500,
                 read_timeout_millis: 3000,
@@ -277,28 +276,25 @@ pub(crate) async fn download_model_progress() -> impl IntoResponse {
     to_res(Ok(r))
 }
 
-pub(crate) async fn check_model_files(Query(q): Query<RobotQuery>) -> impl IntoResponse {
-    if let Ok(op) = get_settings(&q.robot_id) {
-        if let Some(settings) = op {
-            if let embedding::SentenceEmbeddingProvider::HuggingFace(m) =
-                &settings.sentence_embedding_provider.provider
-            {
-                let r = match embedding::load_model_files(&m.get_info().repository) {
-                    Ok(_) => Ok(()),
+pub(crate) async fn check_model_files(bytes: Bytes) -> impl IntoResponse {
+    match serde_json::from_slice::<Vec<String>>(bytes.as_ref()) {
+        Ok(repositories) => {
+            let mut map = Map::new();
+            for repo in repositories.iter() {
+                let r = match embedding::load_model_files(repo) {
+                    Ok(_) => true,
                     Err(e) => {
-                        let err = format!("Hugging face model files incorrect. Err: {:?}", &e);
-                        Err(Error::ErrorWithMessage(err))
+                        log::warn!("Hugging face model {repo} files incorrect. Err: {:?}", &e);
+                        false
                     }
                 };
-                return to_res(r);
-            } else {
-                return to_res(Err(Error::ErrorWithMessage(String::from(
-                    "Provider is not HuggingFace.",
-                ))));
+                map.insert(repo.clone(), Value::from(r));
             }
+            to_res(Ok(map))
         }
+        Err(e) => to_res(Err(Error::ErrorWithMessage(format!(
+            "Invalid request body, err {:?}",
+            &e
+        )))),
     }
-    to_res(Err(Error::ErrorWithMessage(String::from(
-        "Failed load settings.",
-    ))))
 }
