@@ -9,7 +9,7 @@ use crate::result::Result;
 
 #[derive(Deserialize, Serialize)]
 #[serde(tag = "id", content = "model")]
-pub(crate) enum TextGenerateProvider {
+pub(crate) enum TextGenerationProvider {
     HuggingFace(HuggingFaceModel),
     OpenAI(String),
     Ollama(String),
@@ -31,7 +31,7 @@ pub(crate) async fn completion(robot_id: &str, system_hint: &str, s: &str) -> Re
             }
             SentenceEmbeddingProvider::Ollama(m) => {
                 ollama(
-                    &settings.text_generate_provider.api_url,
+                    &settings.text_generation_provider.api_url,
                     &m,
                     s,
                     settings.sentence_embedding_provider.connect_timeout_millis,

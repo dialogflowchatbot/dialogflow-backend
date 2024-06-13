@@ -1,18 +1,17 @@
 use core::time::Duration;
 
-use std::collections::VecDeque;
+// use std::collections::VecDeque;
+use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 use std::vec::Vec;
 
-use candle::{Device, IndexOp, Tensor};
-use candle_nn::VarBuilder;
-use candle_transformers::models::bert::{BertModel, Config, HiddenAct, DTYPE};
-use futures_util::StreamExt;
+use candle::{IndexOp, Tensor};
+use candle_transformers::models::bert::BertModel;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
-use tokenizers::{AddedToken, PaddingParams, PaddingStrategy, Tokenizer, TruncationParams};
+use tokenizers::Tokenizer;
 
-use super::huggingface::{construct_model_file_path, HuggingFaceModel, HuggingFaceModelInfo};
+use super::huggingface::{load_model_files, HuggingFaceModel, HuggingFaceModelInfo};
 use crate::man::settings;
 use crate::result::{Error, Result};
 
@@ -27,7 +26,7 @@ pub(crate) enum SentenceEmbeddingProvider {
 pub(crate) async fn embedding(robot_id: &str, s: &str) -> Result<Vec<f32>> {
     if let Some(settings) = settings::get_settings(robot_id)? {
         match settings.sentence_embedding_provider.provider {
-            SentenceEmbeddingProvider::HuggingFace(m) => hugging_face(&m.get_info(), s),
+            SentenceEmbeddingProvider::HuggingFace(m) => hugging_face(robot_id, &m.get_info(), s),
             SentenceEmbeddingProvider::OpenAI(m) => {
                 open_ai(
                     &m,
@@ -53,143 +52,27 @@ pub(crate) async fn embedding(robot_id: &str, s: &str) -> Result<Vec<f32>> {
     }
 }
 
-static EMBEDDING_MODEL: OnceLock<Mutex<Option<(BertModel, Tokenizer)>>> = OnceLock::new();
+static EMBEDDING_MODEL: OnceLock<Mutex<HashMap<String, (BertModel, Tokenizer)>>> = OnceLock::new();
 
-fn device() -> Result<Device> {
-    if candle::utils::cuda_is_available() {
-        Ok(Device::new_cuda(0)?)
-    } else if candle::utils::metal_is_available() {
-        Ok(Device::new_metal(0)?)
-    } else {
-        Ok(Device::Cpu)
-    }
-}
-
-// type TokenizerImpl = tokenizers::TokenizerImpl<
-//     tokenizers::ModelWrapper,
-//     tokenizers::NormalizerWrapper,
-//     tokenizers::PreTokenizerWrapper,
-//     tokenizers::PostProcessorWrapper,
-//     tokenizers::DecoderWrapper,
-// >;
-
-fn set_tokenizer_config(
-    mirror: &str,
-    mut tokenizer: Tokenizer,
-    pad_token_id: u32,
-) -> Result<Tokenizer> {
-    let f = construct_model_file_path(mirror, "tokenizer_config.json");
-    let p = std::path::Path::new(&f);
-    let t = if p.exists() {
-        let j: serde_json::Value = serde_json::from_slice(std::fs::read(&f)?.as_slice())?;
-        let model_max_length = j["model_max_length"]
-            .as_f64()
-            .expect("Error reading model_max_length from tokenizer_config.json")
-            as f32;
-        let max_length = 8192.min(model_max_length as usize);
-        let pad_token = j["pad_token"]
-            .as_str()
-            .expect("Error reading pad_token from tokenier_config.json")
-            .into();
-        // log::info!("p1 {}", tokenizer.get_padding().unwrap().pad_token);
-        // log::info!("t1 {}", tokenizer.get_truncation().unwrap().max_length);
-        tokenizer
-            .with_padding(Some(PaddingParams {
-                strategy: PaddingStrategy::BatchLongest,
-                pad_token,
-                pad_id: pad_token_id,
-                ..Default::default()
-            }))
-            .with_truncation(Some(TruncationParams {
-                max_length,
-                ..Default::default()
-            }))
-    } else {
-        tokenizer.with_padding(None).with_truncation(None)
-    };
-    let t = match t {
-        Ok(t) => t.clone().into(),
-        Err(e) => {
-            log::warn!("{:?}", &e);
-            tokenizer
-        }
-    };
-
-    Ok(t)
-    // log::info!("p2 {}", tokenizer.get_padding().unwrap().pad_token);
-    // log::info!("t2 {}", tokenizer.get_truncation().unwrap().max_length);
-}
-
-fn set_special_tokens_map(mirror: &str, tokenizer: &mut Tokenizer) -> Result<()> {
-    let f = construct_model_file_path(mirror, "special_tokens_map.json");
-    let p = std::path::Path::new(&f);
-    if !p.exists() {
-        return Ok(());
-    }
-    if let serde_json::Value::Object(root_object) =
-        serde_json::from_slice(std::fs::read(&f)?.as_slice())?
-    {
-        for (_, value) in root_object.iter() {
-            if value.is_string() {
-                tokenizer.add_special_tokens(&[AddedToken {
-                    content: value.as_str().unwrap().into(),
-                    special: true,
-                    ..Default::default()
-                }]);
-            } else if value.is_object() {
-                tokenizer.add_special_tokens(&[AddedToken {
-                    content: value["content"].as_str().unwrap().into(),
-                    special: true,
-                    single_word: value["single_word"].as_bool().unwrap(),
-                    lstrip: value["lstrip"].as_bool().unwrap(),
-                    rstrip: value["rstrip"].as_bool().unwrap(),
-                    normalized: value["normalized"].as_bool().unwrap(),
-                }]);
-            }
-        }
-    }
-    Ok(())
-}
-
-pub(crate) fn load_model_files(mirror: &str) -> Result<(BertModel, Tokenizer)> {
-    let f = construct_model_file_path(mirror, "config.json");
-    let config = std::fs::read_to_string(&f)?;
-    let config: serde_json::Value = serde_json::from_str(&config)?;
-    let pad_token_id = config["pad_token_id"].as_u64().unwrap_or(0) as u32;
-    let config: Config = serde_json::from_value(config)?;
-    let f = construct_model_file_path(mirror, "tokenizer.json");
-    let tokenizer = match Tokenizer::from_file(&f) {
-        Ok(t) => t,
-        Err(e) => return Err(Error::ErrorWithMessage(format!("{}", &e))),
-    };
-    let mut tokenizer = set_tokenizer_config(mirror, tokenizer, pad_token_id)?;
-    set_special_tokens_map(mirror, &mut tokenizer)?;
-    let f = construct_model_file_path(mirror, "model.safetensors");
-    let vb = unsafe { VarBuilder::from_mmaped_safetensors(&[&f], DTYPE, &device()?)? };
-    let model = BertModel::load(vb, &config)?;
-    Ok((model, tokenizer))
-}
-
-pub(crate) fn replace_model_cache(c: (BertModel, Tokenizer)) {
+pub(crate) fn replace_model_cache(robot_id: &str, c: (BertModel, Tokenizer)) {
     if let Some(lock) = EMBEDDING_MODEL.get() {
         if let Ok(mut cache) = lock.lock() {
-            cache.replace(c);
+            cache.insert(String::from(robot_id), c);
         }
     }
 }
 
-fn hugging_face(info: &HuggingFaceModelInfo, s: &str) -> Result<Vec<f32>> {
-    let lock = EMBEDDING_MODEL.get_or_init(|| Mutex::new(None));
+fn hugging_face(robot_id: &str, info: &HuggingFaceModelInfo, s: &str) -> Result<Vec<f32>> {
+    let lock = EMBEDDING_MODEL.get_or_init(|| Mutex::new(HashMap::with_capacity(32)));
     let mut model = lock.lock().unwrap_or_else(|e| {
         log::warn!("{:#?}", &e);
         e.into_inner()
     });
-    let (m, ref mut t) = if model.is_none() {
+    if !model.contains_key(robot_id) {
         let r = load_model_files(&info.repository)?;
-        model.insert(r)
-    } else {
-        model.as_mut().unwrap()
+        model.insert(String::from(robot_id), r);
     };
+    let (m, ref mut t) = model.get_mut(robot_id).unwrap();
     // let tokenizer = match t.with_padding(None).with_truncation(None) {
     //     Ok(t) => t,
     //     Err(e) => return Err(Error::ErrorWithMessage(format!("{}", &e))),

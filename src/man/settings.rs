@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::default::Default;
 use std::net::SocketAddr;
 
@@ -29,8 +30,8 @@ pub(crate) struct GlobalSettings {
 pub(crate) struct Settings {
     #[serde(rename = "maxSessionIdleSec")]
     pub(crate) max_session_idle_sec: u32,
-    #[serde(rename = "textGenerateProvider")]
-    pub(crate) text_generate_provider: TextGenerateProvider,
+    #[serde(rename = "textGenerationProvider")]
+    pub(crate) text_generation_provider: TextGenerationProvider,
     #[serde(rename = "sentenceEmbeddingProvider")]
     pub(crate) sentence_embedding_provider: SentenceEmbeddingProvider,
     #[serde(rename = "smtpHost")]
@@ -79,8 +80,8 @@ pub(crate) struct Settings {
 // }
 
 #[derive(Deserialize, Serialize)]
-pub(crate) struct TextGenerateProvider {
-    pub(crate) provider: completion::TextGenerateProvider,
+pub(crate) struct TextGenerationProvider {
+    pub(crate) provider: completion::TextGenerationProvider,
     #[serde(rename = "apiUrl")]
     pub(crate) api_url: String,
     #[serde(rename = "apiKey")]
@@ -120,9 +121,9 @@ impl Default for Settings {
     fn default() -> Self {
         Settings {
             max_session_idle_sec: 1800,
-            text_generate_provider: TextGenerateProvider {
-                provider: completion::TextGenerateProvider::HuggingFace(
-                    huggingface::HuggingFaceModel::AllMiniLML6V2,
+            text_generation_provider: TextGenerationProvider {
+                provider: completion::TextGenerationProvider::HuggingFace(
+                    huggingface::HuggingFaceModel::Phi3Mini4kInstruct,
                 ),
                 api_url: String::new(),
                 api_key: String::new(),
@@ -218,8 +219,8 @@ pub(crate) fn save_settings(robot_id: &str, data: &Settings) -> Result<()> {
     if let embedding::SentenceEmbeddingProvider::HuggingFace(m) =
         &data.sentence_embedding_provider.provider
     {
-        match crate::ai::embedding::load_model_files(&m.get_info().repository) {
-            Ok(m) => embedding::replace_model_cache(m),
+        match crate::ai::huggingface::load_model_files(&m.get_info().repository) {
+            Ok(m) => embedding::replace_model_cache(robot_id, m),
             Err(e) => {
                 log::warn!("Hugging face model files incorrect. Err: {:?}", &e);
             }
@@ -250,24 +251,56 @@ pub(crate) fn check_smtp_settings(settings: &Settings) -> Result<bool> {
     Ok(mailer.test_connection()?)
 }
 
-pub(crate) async fn download_model_files(Query(q): Query<RobotQuery>) -> impl IntoResponse {
-    if let Ok(op) = get_settings(&q.robot_id) {
-        if let Some(settings) = op {
-            if let embedding::SentenceEmbeddingProvider::HuggingFace(m) =
-                settings.sentence_embedding_provider.provider
-            {
-                let r = huggingface::download_hf_models(&m.get_info()).await;
-                if let Some(s) = huggingface::DOWNLOAD_STATUS.get() {
-                    if let Ok(mut v) = s.lock() {
-                        v.downloading = false;
-                    }
+pub(crate) async fn download_model_files(
+    Query(q): Query<HashMap<String, String>>,
+) -> impl IntoResponse {
+    if !q.contains_key("robot_id") || !q.contains_key("m") {
+        return to_res(Err(Error::ErrorWithMessage(String::from(
+            "Parameter: robot_id or m was missing.",
+        ))));
+    }
+    let robot_id = q.get("robot_id").unwrap();
+    let m = q.get("m").unwrap();
+    let s = get_settings(robot_id);
+    if s.is_err() {
+        return to_res(Err(Error::ErrorWithMessage(String::from(
+            "Failed load settings.",
+        ))));
+    }
+    let r = s.unwrap();
+    if r.is_none() {
+        return to_res(Err(Error::ErrorWithMessage(String::from(
+            "Settings not found.",
+        ))));
+    }
+    let settings = r.unwrap();
+    if m.eq("textGeneration") {
+        if let completion::TextGenerationProvider::HuggingFace(m) =
+            settings.text_generation_provider.provider
+        {
+            let r = huggingface::download_hf_models(&m.get_info()).await;
+            if let Some(s) = huggingface::DOWNLOAD_STATUS.get() {
+                if let Ok(mut v) = s.lock() {
+                    v.downloading = false;
                 }
-                return to_res(r);
             }
+            return to_res(r);
+        }
+    } else if m.eq("sentenceEmbedding") {
+        if let embedding::SentenceEmbeddingProvider::HuggingFace(m) =
+            settings.sentence_embedding_provider.provider
+        {
+            let r = huggingface::download_hf_models(&m.get_info()).await;
+            if let Some(s) = huggingface::DOWNLOAD_STATUS.get() {
+                if let Ok(mut v) = s.lock() {
+                    v.downloading = false;
+                }
+            }
+            return to_res(r);
         }
     }
     to_res(Err(Error::ErrorWithMessage(String::from(
-        "Failed load settings.",
+        "Invalid value of m parameter.",
     ))))
 }
 
@@ -281,7 +314,7 @@ pub(crate) async fn check_model_files(bytes: Bytes) -> impl IntoResponse {
         Ok(repositories) => {
             let mut map = Map::new();
             for repo in repositories.iter() {
-                let r = match embedding::load_model_files(repo) {
+                let r = match huggingface::load_model_files(repo) {
                     Ok(_) => true,
                     Err(e) => {
                         log::warn!("Hugging face model {repo} files incorrect. Err: {:?}", &e);
