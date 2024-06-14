@@ -19,11 +19,21 @@ pub(crate) const TABLE: redb::TableDefinition<&str, &[u8]> = redb::TableDefiniti
 pub(crate) const SETTINGS_KEY: &str = "global-settings";
 
 #[derive(Deserialize, Serialize)]
+pub(crate) struct ModelDownload {
+    #[serde(rename = "connectTimeoutMillis")]
+    pub(crate) connect_timeout_millis: u16,
+    #[serde(rename = "readTimeoutMillis")]
+    pub(crate) read_timeout_millis: u16,
+}
+
+#[derive(Deserialize, Serialize)]
 pub(crate) struct GlobalSettings {
     pub(crate) ip: String,
     pub(crate) port: u16,
     #[serde(rename = "selectRandomPortWhenConflict")]
     pub(crate) select_random_port_when_conflict: bool,
+    #[serde(rename = "modelDownload")]
+    pub(crate) model_download: ModelDownload,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -113,6 +123,10 @@ impl Default for GlobalSettings {
             ip: String::from("127.0.0.1"),
             port: 12715,
             select_random_port_when_conflict: false,
+            model_download: ModelDownload {
+                connect_timeout_millis: 1000,
+                read_timeout_millis: 10000,
+            },
         }
     }
 }
@@ -254,12 +268,12 @@ pub(crate) fn check_smtp_settings(settings: &Settings) -> Result<bool> {
 pub(crate) async fn download_model_files(
     Query(q): Query<HashMap<String, String>>,
 ) -> impl IntoResponse {
-    if !q.contains_key("robot_id") || !q.contains_key("m") {
+    if !q.contains_key("robotId") || !q.contains_key("m") {
         return to_res(Err(Error::ErrorWithMessage(String::from(
             "Parameter: robot_id or m was missing.",
         ))));
     }
-    let robot_id = q.get("robot_id").unwrap();
+    let robot_id = q.get("robotId").unwrap();
     let m = q.get("m").unwrap();
     let s = get_settings(robot_id);
     if s.is_err() {
@@ -273,30 +287,78 @@ pub(crate) async fn download_model_files(
             "Settings not found.",
         ))));
     }
+    let global_settings = get_global_settings();
+    if global_settings.is_err() {
+        return to_res(Err(Error::ErrorWithMessage(String::from(
+            "Load global settings failed.",
+        ))));
+    }
+    let global_settings = global_settings.unwrap();
+    if global_settings.is_none() {
+        return to_res(Err(Error::ErrorWithMessage(String::from(
+            "Global settings not found.",
+        ))));
+    }
+    let global_settings = global_settings.unwrap();
     let settings = r.unwrap();
     if m.eq("textGeneration") {
         if let completion::TextGenerationProvider::HuggingFace(m) =
             settings.text_generation_provider.provider
         {
-            let r = huggingface::download_hf_models(&m.get_info()).await;
-            if let Some(s) = huggingface::DOWNLOAD_STATUS.get() {
-                if let Ok(mut v) = s.lock() {
-                    v.downloading = false;
+            tokio::spawn(async move {
+                match huggingface::download_hf_models(
+                    &m.get_info(),
+                    global_settings.model_download.connect_timeout_millis as u64,
+                    global_settings.model_download.read_timeout_millis as u64,
+                )
+                .await
+                {
+                    Ok(_) => log::info!("All model files download successfully."),
+                    Err(e) => log::error!("Model file downloaded failed, err: {:?}", &e),
                 }
-            }
-            return to_res(r);
+                if let Some(s) = huggingface::DOWNLOAD_STATUS.get() {
+                    if let Ok(mut v) = s.lock() {
+                        v.downloading = false;
+                    }
+                }
+            });
+            // let r = huggingface::download_hf_models(&m.get_info()).await;
+            // if let Some(s) = huggingface::DOWNLOAD_STATUS.get() {
+            //     if let Ok(mut v) = s.lock() {
+            //         v.downloading = false;
+            //     }
+            // }
+            // return to_res(r);
+            return to_res(Ok(()));
         }
     } else if m.eq("sentenceEmbedding") {
         if let embedding::SentenceEmbeddingProvider::HuggingFace(m) =
             settings.sentence_embedding_provider.provider
         {
-            let r = huggingface::download_hf_models(&m.get_info()).await;
-            if let Some(s) = huggingface::DOWNLOAD_STATUS.get() {
-                if let Ok(mut v) = s.lock() {
-                    v.downloading = false;
+            tokio::spawn(async move {
+                match huggingface::download_hf_models(
+                    &m.get_info(),
+                    global_settings.model_download.connect_timeout_millis as u64,
+                    global_settings.model_download.read_timeout_millis as u64,
+                )
+                .await
+                {
+                    Ok(_) => log::info!("All model files download successfully."),
+                    Err(e) => log::error!("Model file downloaded failed, err: {:?}", &e),
                 }
-            }
-            return to_res(r);
+                if let Some(s) = huggingface::DOWNLOAD_STATUS.get() {
+                    if let Ok(mut v) = s.lock() {
+                        v.downloading = false;
+                    }
+                }
+            });
+            // let r = huggingface::download_hf_models(&m.get_info()).await;
+            // if let Some(s) = huggingface::DOWNLOAD_STATUS.get() {
+            //     if let Ok(mut v) = s.lock() {
+            //         v.downloading = false;
+            //     }
+            // }
+            return to_res(Ok(()));
         }
     }
     to_res(Err(Error::ErrorWithMessage(String::from(

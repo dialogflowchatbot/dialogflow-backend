@@ -151,7 +151,7 @@ impl HuggingFaceModel {
             HuggingFaceModel::Phi3Mini4kInstruct => HuggingFaceModelInfo {
                 repository: "microsoft/Phi-3-mini-4k-instruct",
                 mirror: "microsoft/Phi-3-mini-4k-instruct",
-                model_files: vec![""],
+                model_files: get_common_model_files(),
                 model_index_file: "model.safetensors.index.json",
                 tokenizer_filename: "tokenizer.json",
                 dimenssions: 1024,
@@ -187,7 +187,11 @@ pub(crate) fn get_download_status() -> Option<DownloadStatus> {
     None
 }
 
-pub(crate) async fn download_hf_models(info: &HuggingFaceModelInfo) -> Result<()> {
+pub(crate) async fn download_hf_models(
+    info: &HuggingFaceModelInfo,
+    connect_timeout: u64,
+    read_timeout: u64,
+) -> Result<()> {
     if let Ok(v) = DOWNLOAD_STATUS
         .get_or_init(|| {
             Mutex::new(DownloadStatus {
@@ -208,8 +212,8 @@ pub(crate) async fn download_hf_models(info: &HuggingFaceModelInfo) -> Result<()
     let root_path = format!("{}{}", HUGGING_FACE_MODEL_ROOT, info.repository);
     tokio::fs::create_dir_all(&root_path).await?;
     let mut builder = reqwest::Client::builder()
-        .connect_timeout(Duration::from_millis(5000))
-        .read_timeout(Duration::from_millis(10000));
+        .connect_timeout(Duration::from_millis(connect_timeout))
+        .read_timeout(Duration::from_millis(read_timeout));
     if let Ok(proxy) = std::env::var("https_proxy") {
         if !proxy.is_empty() {
             log::info!("Detected proxy setting: {}", &proxy);
@@ -217,19 +221,19 @@ pub(crate) async fn download_hf_models(info: &HuggingFaceModelInfo) -> Result<()
         }
     }
     let client = builder.build()?;
-    let files = if info.model_index_file.is_empty() {
-        // files.extend_from_slice(&info.model_files);
-        info.model_files
-            .iter()
-            .map(|&s| String::from(s))
-            .collect::<Vec<_>>()
-    } else {
+    let mut files = info
+        .model_files
+        .iter()
+        .map(|&s| String::from(s))
+        .collect::<Vec<_>>();
+    if !info.model_index_file.is_empty() {
         let model_index_file = construct_model_file_path(&info.mirror, &info.model_index_file);
         let path = std::path::Path::new(&model_index_file);
         if !path.exists() {
             download_hf_file(&client, info, &root_path, &info.model_index_file).await?;
         }
-        load_safetensors(&info.mirror, &info.model_index_file)?
+        let f = load_safetensors(&info.mirror, &info.model_index_file)?;
+        files.extend_from_slice(&f);
     };
     for f in files.iter() {
         download_hf_file(&client, info, &root_path, f).await?;
