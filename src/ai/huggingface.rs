@@ -4,6 +4,9 @@ use std::sync::{Mutex, OnceLock};
 use candle::{DType, Device, IndexOp, Tensor};
 use candle_nn::VarBuilder;
 use candle_transformers::models::bert::{BertModel, Config, HiddenAct, DTYPE};
+use candle_transformers::models::llama::{
+    Cache as LlamaCache, Config as LlamaConfig, Llama, LlamaConfig as LlamaTemporaryConfig,
+};
 use candle_transformers::models::phi3::{Config as Phi3Config, Model as Phi3};
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
@@ -30,7 +33,19 @@ pub(crate) enum HuggingFaceModel {
     Phi3Mini4kInstruct,
 }
 
+#[derive(Deserialize, Serialize, PartialEq)]
+pub(crate) enum HuggingFaceModelType {
+    Bert,
+    Phi3,
+}
+
+// enum LoadedHfModel {
+//     Bert(BertModel, Tokenizer),
+//     Phi3(Phi3),
+// }
+
 pub(crate) struct HuggingFaceModelInfo {
+    mode_type: HuggingFaceModelType,
     pub(crate) repository: &'static str,
     mirror: &'static str,
     model_files: Vec<&'static str>,
@@ -59,6 +74,7 @@ impl HuggingFaceModel {
                 model_index_file: "",
                 tokenizer_filename: "tokenizer.json",
                 dimenssions: 384,
+                mode_type: HuggingFaceModelType::Bert,
             },
             HuggingFaceModel::ParaphraseMLMiniLML12V2 => HuggingFaceModelInfo {
                 repository: "sentence-transformers/paraphrase-MiniLM-L12-v2",
@@ -67,6 +83,7 @@ impl HuggingFaceModel {
                 model_index_file: "",
                 tokenizer_filename: "tokenizer.json",
                 dimenssions: 384,
+                mode_type: HuggingFaceModelType::Bert,
             },
             HuggingFaceModel::ParaphraseMLMpnetBaseV2 => HuggingFaceModelInfo {
                 repository: "sentence-transformers/paraphrase-multilingual-mpnet-base-v2",
@@ -75,6 +92,7 @@ impl HuggingFaceModel {
                 model_index_file: "",
                 tokenizer_filename: "tokenizer.json",
                 dimenssions: 768,
+                mode_type: HuggingFaceModelType::Bert,
             },
             HuggingFaceModel::BgeSmallEnV1_5 => HuggingFaceModelInfo {
                 repository: "BAAI/bge-small-en-v1.5",
@@ -83,6 +101,7 @@ impl HuggingFaceModel {
                 model_index_file: "",
                 tokenizer_filename: "tokenizer.json",
                 dimenssions: 384,
+                mode_type: HuggingFaceModelType::Bert,
             },
             HuggingFaceModel::BgeBaseEnV1_5 => HuggingFaceModelInfo {
                 repository: "BAAI/bge-base-en-v1.5",
@@ -91,6 +110,7 @@ impl HuggingFaceModel {
                 model_index_file: "",
                 tokenizer_filename: "tokenizer.json",
                 dimenssions: 768,
+                mode_type: HuggingFaceModelType::Bert,
             },
             HuggingFaceModel::BgeLargeEnV1_5 => HuggingFaceModelInfo {
                 repository: "BAAI/bge-large-en-v1.5",
@@ -99,6 +119,7 @@ impl HuggingFaceModel {
                 model_index_file: "",
                 tokenizer_filename: "tokenizer.json",
                 dimenssions: 1024,
+                mode_type: HuggingFaceModelType::Bert,
             },
             HuggingFaceModel::BgeM3 => HuggingFaceModelInfo {
                 repository: "BAAI/bge-m3",
@@ -107,6 +128,7 @@ impl HuggingFaceModel {
                 model_index_file: "",
                 tokenizer_filename: "tokenizer.json",
                 dimenssions: 1024,
+                mode_type: HuggingFaceModelType::Bert,
             },
             HuggingFaceModel::NomicEmbedTextV1_5 => HuggingFaceModelInfo {
                 repository: "nomic-ai/nomic-embed-text-v1.5",
@@ -115,6 +137,7 @@ impl HuggingFaceModel {
                 model_index_file: "",
                 tokenizer_filename: "tokenizer.json",
                 dimenssions: 768,
+                mode_type: HuggingFaceModelType::Bert,
             },
             HuggingFaceModel::MultilingualE5Small => HuggingFaceModelInfo {
                 repository: "intfloat/multilingual-e5-small",
@@ -123,6 +146,7 @@ impl HuggingFaceModel {
                 model_index_file: "",
                 tokenizer_filename: "tokenizer.json",
                 dimenssions: 384,
+                mode_type: HuggingFaceModelType::Bert,
             },
             HuggingFaceModel::MultilingualE5Base => HuggingFaceModelInfo {
                 repository: "intfloat/multilingual-e5-base",
@@ -131,6 +155,7 @@ impl HuggingFaceModel {
                 model_index_file: "",
                 tokenizer_filename: "tokenizer.json",
                 dimenssions: 768,
+                mode_type: HuggingFaceModelType::Bert,
             },
             HuggingFaceModel::MultilingualE5Large => HuggingFaceModelInfo {
                 repository: "intfloat/multilingual-e5-large",
@@ -139,6 +164,7 @@ impl HuggingFaceModel {
                 model_index_file: "",
                 tokenizer_filename: "tokenizer.json",
                 dimenssions: 1024,
+                mode_type: HuggingFaceModelType::Bert,
             },
             HuggingFaceModel::MxbaiEmbedLargeV1 => HuggingFaceModelInfo {
                 repository: "mixedbread-ai/mxbai-embed-large-v1",
@@ -147,14 +173,27 @@ impl HuggingFaceModel {
                 model_index_file: "",
                 tokenizer_filename: "tokenizer.json",
                 dimenssions: 1024,
+                mode_type: HuggingFaceModelType::Bert,
             },
             HuggingFaceModel::Phi3Mini4kInstruct => HuggingFaceModelInfo {
                 repository: "microsoft/Phi-3-mini-4k-instruct",
                 mirror: "microsoft/Phi-3-mini-4k-instruct",
-                model_files: get_common_model_files(),
+                model_files: {
+                    let mut v = get_common_model_files();
+                    let mut idx = 0usize;
+                    for &f in v.iter() {
+                        if f.eq("model.safetensors") {
+                            break;
+                        }
+                        idx = idx + 1;
+                    }
+                    v.remove(idx);
+                    v
+                },
                 model_index_file: "model.safetensors.index.json",
                 tokenizer_filename: "tokenizer.json",
                 dimenssions: 1024,
+                mode_type: HuggingFaceModelType::Phi3,
             },
         }
     }
@@ -170,6 +209,7 @@ pub(crate) struct DownloadStatus {
     #[serde(rename = "downloadedLen")]
     pub(crate) downloaded_len: u64,
     pub(crate) url: String,
+    pub(crate) err: String,
 }
 
 pub(crate) static DOWNLOAD_STATUS: OnceLock<Mutex<DownloadStatus>> = OnceLock::new();
@@ -187,27 +227,65 @@ pub(crate) fn get_download_status() -> Option<DownloadStatus> {
     None
 }
 
-pub(crate) async fn download_hf_models(
-    info: &HuggingFaceModelInfo,
-    connect_timeout: u64,
-    read_timeout: u64,
-) -> Result<()> {
-    if let Ok(v) = DOWNLOAD_STATUS
+fn download_status<'l>() -> Result<std::sync::MutexGuard<'l, DownloadStatus>> {
+    let locker = match DOWNLOAD_STATUS
         .get_or_init(|| {
             Mutex::new(DownloadStatus {
                 downloading: false,
                 total_len: 1,
                 downloaded_len: 0,
                 url: String::new(),
+                err: String::new(),
             })
         })
-        .lock()
+        .try_lock()
     {
-        if v.downloading {
+        Ok(l) => l,
+        Err(e) => match e {
+            std::sync::TryLockError::Poisoned(pe) => {
+                log::warn!("{:?}", &pe);
+                pe.into_inner()
+            }
+            std::sync::TryLockError::WouldBlock => {
+                return Err(Error::ErrorWithMessage(String::from(
+                    "Model files are downloading.",
+                )));
+            }
+        },
+    };
+    Ok(locker)
+}
+
+pub(crate) async fn download_hf_models(
+    info: &HuggingFaceModelInfo,
+    connect_timeout: u64,
+    read_timeout: u64,
+) -> Result<()> {
+    // if let Ok(v) = DOWNLOAD_STATUS
+    //     .get_or_init(|| {
+    //         Mutex::new(DownloadStatus {
+    //             downloading: false,
+    //             total_len: 1,
+    //             downloaded_len: 0,
+    //             url: String::new(),
+    //         })
+    //     })
+    //     .lock()
+    // {
+    //     if v.downloading {
+    //         return Err(Error::ErrorWithMessage(String::from(
+    //             "Model files are downloading.",
+    //         )));
+    //     }
+    // }
+    {
+        let mut status = download_status()?;
+        if status.downloading {
             return Err(Error::ErrorWithMessage(String::from(
                 "Model files are downloading.",
             )));
         }
+        status.downloading = true;
     }
     let root_path = format!("{}{}", HUGGING_FACE_MODEL_ROOT, info.repository);
     tokio::fs::create_dir_all(&root_path).await?;
@@ -226,63 +304,35 @@ pub(crate) async fn download_hf_models(
         .iter()
         .map(|&s| String::from(s))
         .collect::<Vec<_>>();
+    let mut r: Result<_> = Ok(());
     if !info.model_index_file.is_empty() {
         let model_index_file = construct_model_file_path(&info.mirror, &info.model_index_file);
         let path = std::path::Path::new(&model_index_file);
         if !path.exists() {
-            download_hf_file(&client, info, &root_path, &info.model_index_file).await?;
+            r = download_hf_file(&client, info, &root_path, &info.model_index_file).await;
         }
-        let f = load_safetensors(&info.mirror, &info.model_index_file)?;
-        files.extend_from_slice(&f);
+        if r.is_ok() {
+            let f = load_safetensors(&info.mirror, &info.model_index_file)?;
+            files.extend_from_slice(&f);
+        }
     };
-    for f in files.iter() {
-        download_hf_file(&client, info, &root_path, f).await?;
-        // let file_path_str = format!("{}/{}", &root_path, f);
-        // let file_path = std::path::Path::new(&file_path_str);
-        // if tokio::fs::try_exists(file_path).await? {
-        //     continue;
-        // }
-        // let u = format!("https://huggingface.co/{}/resolve/main/{}", &info.mirror, f);
-        // if let Some(s) = DOWNLOAD_STATUS.get() {
-        //     if let Ok(mut v) = s.lock() {
-        //         v.downloading = true;
-        //         v.url = String::from(f);
-        //     }
-        // }
-        // let res = client.get(&u).query(&[("download", "true")]).send().await?;
-        // let total_size = res.content_length().unwrap();
-        // // println!("Downloading {f}, total size {total_size}");
-        // if let Some(s) = DOWNLOAD_STATUS.get() {
-        //     if let Ok(mut v) = s.lock() {
-        //         v.total_len = total_size;
-        //     }
-        // }
-        // // let b = res.bytes().await?;
-        // // fs::write("./temp.file", b.as_ref()).await?;
-        // // let mut downloaded = 0u64;
-        // let mut stream = res.bytes_stream();
-        // let mut file = OpenOptions::new()
-        //     .read(false)
-        //     .write(true)
-        //     .truncate(false)
-        //     .create_new(true)
-        //     .open(file_path)
-        //     .await?;
-        // // let mut file = File::create("./temp.file").await?;
-
-        // while let Some(item) = stream.next().await {
-        //     let chunk = item?;
-        //     file.write_all(&chunk).await?;
-        //     if let Some(s) = DOWNLOAD_STATUS.get() {
-        //         if let Ok(mut v) = s.lock() {
-        //             let new = std::cmp::min(v.downloaded_len + (chunk.len() as u64), total_size);
-        //             // log::info!("Downloaded {new}");
-        //             v.downloaded_len = new;
-        //         }
-        //     }
-        // }
+    if r.is_ok() {
+        for f in files.iter() {
+            r = download_hf_file(&client, info, &root_path, f).await;
+            if r.is_err() {
+                break;
+            }
+        }
     }
-    Ok(())
+    {
+        let mut status = download_status()?;
+        if r.is_err() {
+            status.err = format!("Download failed,err: {:?}", r.as_ref().err());
+        }
+        status.downloading = false;
+    }
+
+    r
 }
 
 async fn download_hf_file(
@@ -299,7 +349,6 @@ async fn download_hf_file(
     let u = format!("https://huggingface.co/{}/resolve/main/{}", &info.mirror, f);
     if let Some(s) = DOWNLOAD_STATUS.get() {
         if let Ok(mut v) = s.lock() {
-            v.downloading = true;
             v.url = String::from(f);
         }
     }
@@ -359,6 +408,47 @@ fn device() -> Result<Device> {
 //     tokenizers::PostProcessorWrapper,
 //     tokenizers::DecoderWrapper,
 // >;
+
+pub(crate) fn check_model_files(info: &HuggingFaceModelInfo) -> Result<bool> {
+    // let f = construct_model_file_path(repo, "config.json");
+    // let config = std::fs::read(&f)?;
+    // let config: serde_json::Value = serde_json::from_slice(&config)?;
+    // let arch = &config["architectures"];
+    // if !arch.is_array() {
+    //     return Ok(false)
+    // }
+    // let architectures=arch.as_array().unwrap();
+    // if architectures.len() <1{
+    //     return Ok(false)
+    // }
+    // let arch=architectures.get(0).unwrap();
+    // if !arch.is_string() {
+    //     return Ok(false)
+    // }
+    // if arch.as_str().unwrap().starts_with("Bert") {
+    if info.mode_type == HuggingFaceModelType::Bert {
+        return load_bert_model_files(&info.repository)
+            .map(|_| true)
+            .or_else(|e| {
+                log::warn!("Check model files failed,err: {:?}", &e);
+                Ok(false)
+            });
+    } else if info.mode_type == HuggingFaceModelType::Phi3 {
+        return load_phi3_model_files(&info).map(|_| true).or_else(|e| {
+            log::warn!("Check model files failed,err: {:?}", &e);
+            Ok(false)
+        });
+    }
+    Ok(false)
+}
+
+fn init_tokenizer(repo: &str) -> Result<Tokenizer> {
+    let f = construct_model_file_path(repo, "tokenizer.json");
+    match Tokenizer::from_file(&f) {
+        Ok(t) => Ok(t),
+        Err(e) => Err(Error::ErrorWithMessage(format!("{}", &e))),
+    }
+}
 
 fn set_tokenizer_config(
     mirror: &str,
@@ -438,28 +528,19 @@ fn set_special_tokens_map(mirror: &str, tokenizer: &mut Tokenizer) -> Result<()>
     Ok(())
 }
 
-pub(crate) fn load_model_files(mirror: &str) -> Result<(BertModel, Tokenizer)> {
+pub(crate) fn load_bert_model_files(mirror: &str) -> Result<(BertModel, Tokenizer)> {
     let f = construct_model_file_path(mirror, "config.json");
     let config = std::fs::read_to_string(&f)?;
     let config: serde_json::Value = serde_json::from_str(&config)?;
     let pad_token_id = config["pad_token_id"].as_u64().unwrap_or(0) as u32;
     let config: Config = serde_json::from_value(config)?;
-    let f = construct_model_file_path(mirror, "tokenizer.json");
-    let tokenizer = match Tokenizer::from_file(&f) {
-        Ok(t) => t,
-        Err(e) => return Err(Error::ErrorWithMessage(format!("{}", &e))),
-    };
+    let tokenizer = init_tokenizer(mirror)?;
     let mut tokenizer = set_tokenizer_config(mirror, tokenizer, pad_token_id)?;
     set_special_tokens_map(mirror, &mut tokenizer)?;
     let f = construct_model_file_path(mirror, "model.safetensors");
     let vb = unsafe { VarBuilder::from_mmaped_safetensors(&[&f], DTYPE, &device()?)? };
     let model = BertModel::load(vb, &config)?;
     Ok((model, tokenizer))
-}
-
-enum HfModel {
-    Bert((BertModel, Tokenizer)),
-    Phi3(Phi3),
 }
 
 fn load_safetensors(mirror: &str, json_file: &str) -> Result<Vec<String>> {
@@ -489,7 +570,7 @@ fn load_safetensors(mirror: &str, json_file: &str) -> Result<Vec<String>> {
     Ok(Vec::from_iter(safetensors_files))
 }
 
-fn load_phi3_model_files(info: &HuggingFaceModelInfo) -> Result<HfModel> {
+pub(crate) fn load_phi3_model_files(info: &HuggingFaceModelInfo) -> Result<Phi3> {
     let device = device()?;
     let dtype = if device.is_cuda() {
         DType::BF16
@@ -505,5 +586,28 @@ fn load_phi3_model_files(info: &HuggingFaceModelInfo) -> Result<HfModel> {
     let config = std::fs::read_to_string(config_filename)?;
     let config: Phi3Config = serde_json::from_str(&config)?;
     let phi3 = Phi3::new(&config, vb)?;
-    Ok(HfModel::Phi3(phi3))
+    Ok(phi3)
+}
+
+pub(crate) fn load_llama_model_files(
+    info: &HuggingFaceModelInfo,
+) -> Result<(Llama, LlamaCache, Tokenizer, Option<u32>)> {
+    let tokenizer = init_tokenizer(&info.repository)?;
+
+    let config_filename = construct_model_file_path(&info.repository, "config.json");
+    let config: LlamaTemporaryConfig = serde_json::from_slice(&std::fs::read(config_filename)?)?;
+    let config = config.into_config(true);
+    let eos_token_id = config
+        .eos_token_id
+        .or_else(|| tokenizer.token_to_id("</s>"));
+    let filenames = if info.model_index_file.is_empty() {
+        vec![String::from("model.safetensors")]
+    } else {
+        load_safetensors(&info.repository, &info.model_index_file)?
+    };
+    let device = device()?;
+    let dtype = DType::F16;
+    let cache = LlamaCache::new(true, dtype, &config, &device)?;
+    let vb = unsafe { VarBuilder::from_mmaped_safetensors(&filenames, dtype, &device)? };
+    Ok((Llama::load(vb, &config)?, cache, tokenizer, eos_token_id))
 }

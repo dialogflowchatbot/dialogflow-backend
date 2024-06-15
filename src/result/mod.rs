@@ -146,3 +146,9 @@ impl From<candle::Error> for Error {
         Error::ErrorWithMessage(format!("{:?}", err))
     }
 }
+
+impl<T> From<std::sync::PoisonError<T>> for Error {
+    fn from(err: std::sync::PoisonError<T>) -> Self {
+        Error::ErrorWithMessage(format!("{:?}", err))
+    }
+}

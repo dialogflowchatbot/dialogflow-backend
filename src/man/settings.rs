@@ -9,6 +9,7 @@ use axum::Json;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
+use crate::ai::huggingface::HuggingFaceModel;
 use crate::ai::{completion, embedding, huggingface};
 use crate::db;
 use crate::result::{Error, Result};
@@ -233,7 +234,7 @@ pub(crate) fn save_settings(robot_id: &str, data: &Settings) -> Result<()> {
     if let embedding::SentenceEmbeddingProvider::HuggingFace(m) =
         &data.sentence_embedding_provider.provider
     {
-        match crate::ai::huggingface::load_model_files(&m.get_info().repository) {
+        match crate::ai::huggingface::load_bert_model_files(&m.get_info().repository) {
             Ok(m) => embedding::replace_model_cache(robot_id, m),
             Err(e) => {
                 log::warn!("Hugging face model files incorrect. Err: {:?}", &e);
@@ -316,11 +317,11 @@ pub(crate) async fn download_model_files(
                     Ok(_) => log::info!("All model files download successfully."),
                     Err(e) => log::error!("Model file downloaded failed, err: {:?}", &e),
                 }
-                if let Some(s) = huggingface::DOWNLOAD_STATUS.get() {
-                    if let Ok(mut v) = s.lock() {
-                        v.downloading = false;
-                    }
-                }
+                // if let Some(s) = huggingface::DOWNLOAD_STATUS.get() {
+                //     if let Ok(mut v) = s.lock() {
+                //         v.downloading = false;
+                //     }
+                // }
             });
             // let r = huggingface::download_hf_models(&m.get_info()).await;
             // if let Some(s) = huggingface::DOWNLOAD_STATUS.get() {
@@ -346,11 +347,11 @@ pub(crate) async fn download_model_files(
                     Ok(_) => log::info!("All model files download successfully."),
                     Err(e) => log::error!("Model file downloaded failed, err: {:?}", &e),
                 }
-                if let Some(s) = huggingface::DOWNLOAD_STATUS.get() {
-                    if let Ok(mut v) = s.lock() {
-                        v.downloading = false;
-                    }
-                }
+                // if let Some(s) = huggingface::DOWNLOAD_STATUS.get() {
+                //     if let Ok(mut v) = s.lock() {
+                //         v.downloading = false;
+                //     }
+                // }
             });
             // let r = huggingface::download_hf_models(&m.get_info()).await;
             // if let Some(s) = huggingface::DOWNLOAD_STATUS.get() {
@@ -372,18 +373,23 @@ pub(crate) async fn download_model_progress() -> impl IntoResponse {
 }
 
 pub(crate) async fn check_model_files(bytes: Bytes) -> impl IntoResponse {
-    match serde_json::from_slice::<Vec<String>>(bytes.as_ref()) {
+    match serde_json::from_slice::<Vec<HuggingFaceModel>>(bytes.as_ref()) {
         Ok(repositories) => {
             let mut map = Map::new();
-            for repo in repositories.iter() {
-                let r = match huggingface::load_model_files(repo) {
+            for model in repositories.iter() {
+                let info = model.get_info();
+                let r = match huggingface::check_model_files(&info) {
                     Ok(_) => true,
                     Err(e) => {
-                        log::warn!("Hugging face model {repo} files incorrect. Err: {:?}", &e);
+                        log::warn!(
+                            "Hugging face model {} files incorrect. Err: {:?}",
+                            info.repository,
+                            &e
+                        );
                         false
                     }
                 };
-                map.insert(repo.clone(), Value::from(r));
+                map.insert(String::from(info.repository), Value::from(r));
             }
             to_res(Ok(map))
         }
