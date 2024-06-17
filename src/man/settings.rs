@@ -20,11 +20,13 @@ pub(crate) const TABLE: redb::TableDefinition<&str, &[u8]> = redb::TableDefiniti
 pub(crate) const SETTINGS_KEY: &str = "global-settings";
 
 #[derive(Deserialize, Serialize)]
-pub(crate) struct ModelDownload {
+pub(crate) struct HfModelDownload {
     #[serde(rename = "connectTimeoutMillis")]
     pub(crate) connect_timeout_millis: u16,
     #[serde(rename = "readTimeoutMillis")]
     pub(crate) read_timeout_millis: u16,
+    #[serde(rename = "accessToken")]
+    pub(crate) access_token: String,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -33,8 +35,8 @@ pub(crate) struct GlobalSettings {
     pub(crate) port: u16,
     #[serde(rename = "selectRandomPortWhenConflict")]
     pub(crate) select_random_port_when_conflict: bool,
-    #[serde(rename = "modelDownload")]
-    pub(crate) model_download: ModelDownload,
+    #[serde(rename = "HfModelDownload")]
+    pub(crate) hf_model_download: HfModelDownload,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -124,9 +126,10 @@ impl Default for GlobalSettings {
             ip: String::from("127.0.0.1"),
             port: 12715,
             select_random_port_when_conflict: false,
-            model_download: ModelDownload {
+            hf_model_download: HfModelDownload {
                 connect_timeout_millis: 1000,
                 read_timeout_millis: 10000,
+                access_token: String::new(),
             },
         }
     }
@@ -231,6 +234,14 @@ pub(crate) async fn rest_save_global_settings(
 }
 
 pub(crate) fn save_settings(robot_id: &str, data: &Settings) -> Result<()> {
+    if let completion::TextGenerationProvider::HuggingFace(m) =
+        &data.text_generation_provider.provider
+    {
+        if let Err(e) = completion::replace_model_cache(robot_id, &m) {
+            log::warn!("Hugging face model files incorrect. Err: {:?}", &e);
+        }
+    }
+
     if let embedding::SentenceEmbeddingProvider::HuggingFace(m) =
         &data.sentence_embedding_provider.provider
     {
@@ -266,28 +277,7 @@ pub(crate) fn check_smtp_settings(settings: &Settings) -> Result<bool> {
     Ok(mailer.test_connection()?)
 }
 
-pub(crate) async fn download_model_files(
-    Query(q): Query<HashMap<String, String>>,
-) -> impl IntoResponse {
-    if !q.contains_key("robotId") || !q.contains_key("m") {
-        return to_res(Err(Error::ErrorWithMessage(String::from(
-            "Parameter: robot_id or m was missing.",
-        ))));
-    }
-    let robot_id = q.get("robotId").unwrap();
-    let m = q.get("m").unwrap();
-    let s = get_settings(robot_id);
-    if s.is_err() {
-        return to_res(Err(Error::ErrorWithMessage(String::from(
-            "Failed load settings.",
-        ))));
-    }
-    let r = s.unwrap();
-    if r.is_none() {
-        return to_res(Err(Error::ErrorWithMessage(String::from(
-            "Settings not found.",
-        ))));
-    }
+pub(crate) async fn download_model_files(Json(m): Json<HuggingFaceModel>) -> impl IntoResponse {
     let global_settings = get_global_settings();
     if global_settings.is_err() {
         return to_res(Err(Error::ErrorWithMessage(String::from(
@@ -301,70 +291,25 @@ pub(crate) async fn download_model_files(
         ))));
     }
     let global_settings = global_settings.unwrap();
-    let settings = r.unwrap();
-    if m.eq("textGeneration") {
-        if let completion::TextGenerationProvider::HuggingFace(m) =
-            settings.text_generation_provider.provider
+    tokio::spawn(async move {
+        match huggingface::download_hf_models(
+            &m.get_info(),
+            &global_settings.hf_model_download.access_token,
+            global_settings.hf_model_download.connect_timeout_millis as u64,
+            global_settings.hf_model_download.read_timeout_millis as u64,
+        )
+        .await
         {
-            tokio::spawn(async move {
-                match huggingface::download_hf_models(
-                    &m.get_info(),
-                    global_settings.model_download.connect_timeout_millis as u64,
-                    global_settings.model_download.read_timeout_millis as u64,
-                )
-                .await
-                {
-                    Ok(_) => log::info!("All model files download successfully."),
-                    Err(e) => log::error!("Model file downloaded failed, err: {:?}", &e),
-                }
-                // if let Some(s) = huggingface::DOWNLOAD_STATUS.get() {
-                //     if let Ok(mut v) = s.lock() {
-                //         v.downloading = false;
-                //     }
-                // }
-            });
-            // let r = huggingface::download_hf_models(&m.get_info()).await;
-            // if let Some(s) = huggingface::DOWNLOAD_STATUS.get() {
-            //     if let Ok(mut v) = s.lock() {
-            //         v.downloading = false;
-            //     }
-            // }
-            // return to_res(r);
-            return to_res(Ok(()));
+            Ok(_) => log::info!("All model files download successfully."),
+            Err(e) => log::error!("Model file downloaded failed, err: {:?}", &e),
         }
-    } else if m.eq("sentenceEmbedding") {
-        if let embedding::SentenceEmbeddingProvider::HuggingFace(m) =
-            settings.sentence_embedding_provider.provider
-        {
-            tokio::spawn(async move {
-                match huggingface::download_hf_models(
-                    &m.get_info(),
-                    global_settings.model_download.connect_timeout_millis as u64,
-                    global_settings.model_download.read_timeout_millis as u64,
-                )
-                .await
-                {
-                    Ok(_) => log::info!("All model files download successfully."),
-                    Err(e) => log::error!("Model file downloaded failed, err: {:?}", &e),
-                }
-                // if let Some(s) = huggingface::DOWNLOAD_STATUS.get() {
-                //     if let Ok(mut v) = s.lock() {
-                //         v.downloading = false;
-                //     }
-                // }
-            });
-            // let r = huggingface::download_hf_models(&m.get_info()).await;
-            // if let Some(s) = huggingface::DOWNLOAD_STATUS.get() {
-            //     if let Ok(mut v) = s.lock() {
-            //         v.downloading = false;
-            //     }
-            // }
-            return to_res(Ok(()));
-        }
-    }
-    to_res(Err(Error::ErrorWithMessage(String::from(
-        "Invalid value of m parameter.",
-    ))))
+        // if let Some(s) = huggingface::DOWNLOAD_STATUS.get() {
+        //     if let Ok(mut v) = s.lock() {
+        //         v.downloading = false;
+        //     }
+        // }
+    });
+    to_res(Ok(()))
 }
 
 pub(crate) async fn download_model_progress() -> impl IntoResponse {
@@ -379,7 +324,7 @@ pub(crate) async fn check_model_files(bytes: Bytes) -> impl IntoResponse {
             for model in repositories.iter() {
                 let info = model.get_info();
                 let r = match huggingface::check_model_files(&info) {
-                    Ok(_) => true,
+                    Ok(r) => r,
                     Err(e) => {
                         log::warn!(
                             "Hugging face model {} files incorrect. Err: {:?}",
@@ -389,7 +334,7 @@ pub(crate) async fn check_model_files(bytes: Bytes) -> impl IntoResponse {
                         false
                     }
                 };
-                map.insert(String::from(info.repository), Value::from(r));
+                map.insert(model.to_string(), Value::from(r));
             }
             to_res(Ok(map))
         }

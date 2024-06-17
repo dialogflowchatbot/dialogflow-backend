@@ -2,10 +2,9 @@ use core::time::Duration;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-use crate::ai::embedding::SentenceEmbeddingProvider;
-use crate::ai::huggingface::HuggingFaceModel;
+use crate::ai::huggingface::{HuggingFaceModel, HuggingFaceModelType};
 use crate::man::settings;
-use crate::result::Result;
+use crate::result::{Error, Result};
 
 #[derive(Deserialize, Serialize)]
 #[serde(tag = "id", content = "model")]
@@ -15,27 +14,43 @@ pub(crate) enum TextGenerationProvider {
     Ollama(String),
 }
 
-pub(crate) async fn completion(robot_id: &str, system_hint: &str, s: &str) -> Result<String> {
+pub(crate) fn replace_model_cache(robot_id: &str, m: &HuggingFaceModel) -> Result<()> {
+    let info = m.get_info();
+    match info.mode_type {
+        HuggingFaceModelType::Llama => super::llama::replace_model_cache(robot_id, &info),
+        HuggingFaceModelType::Gemma => super::gemma::replace_model_cache(robot_id, &info),
+        HuggingFaceModelType::Phi3 => super::phi3::replace_model_cache(robot_id, &info),
+        HuggingFaceModelType::Bert => Err(Error::ErrorWithMessage(format!(
+            "Unsuported model type {:?}.",
+            &info.mode_type
+        ))),
+    }
+}
+
+pub(crate) async fn completion(robot_id: &str, system_hint: &str, prompt: &str) -> Result<String> {
     if let Some(settings) = settings::get_settings(robot_id)? {
-        match settings.sentence_embedding_provider.provider {
-            SentenceEmbeddingProvider::HuggingFace(m) => todo!(),
-            SentenceEmbeddingProvider::OpenAI(m) => {
+        match settings.text_generation_provider.provider {
+            TextGenerationProvider::HuggingFace(m) => {
+                huggingface(robot_id, &m, prompt, 10000)?;
+                Ok(String::from("TextGeneration"))
+            }
+            TextGenerationProvider::OpenAI(m) => {
                 open_ai(
                     &m,
                     system_hint,
-                    s,
-                    settings.sentence_embedding_provider.connect_timeout_millis,
-                    settings.sentence_embedding_provider.read_timeout_millis,
+                    prompt,
+                    settings.text_generation_provider.connect_timeout_millis,
+                    settings.text_generation_provider.read_timeout_millis,
                 )
                 .await
             }
-            SentenceEmbeddingProvider::Ollama(m) => {
+            TextGenerationProvider::Ollama(m) => {
                 ollama(
                     &settings.text_generation_provider.api_url,
                     &m,
-                    s,
-                    settings.sentence_embedding_provider.connect_timeout_millis,
-                    settings.sentence_embedding_provider.read_timeout_millis,
+                    prompt,
+                    settings.text_generation_provider.connect_timeout_millis,
+                    settings.text_generation_provider.read_timeout_millis,
                 )
                 .await
             }
@@ -43,6 +58,25 @@ pub(crate) async fn completion(robot_id: &str, system_hint: &str, s: &str) -> Re
     } else {
         Ok(String::new())
     }
+}
+
+fn huggingface(
+    robot_id: &str,
+    m: &HuggingFaceModel,
+    prompt: &str,
+    sample_len: usize,
+) -> Result<()> {
+    let info = m.get_info();
+    match info.mode_type {
+        HuggingFaceModelType::Gemma => {
+            super::gemma::gen_text(robot_id, &info, prompt, sample_len, None)?;
+        }
+        HuggingFaceModelType::Llama => {
+            super::llama::gen_text(robot_id, &info, prompt, sample_len, None, None)?;
+        }
+        _ => todo!(),
+    }
+    Ok(())
 }
 
 async fn open_ai(

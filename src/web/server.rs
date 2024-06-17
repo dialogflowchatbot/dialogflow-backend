@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use tower_http::cors::{AllowOrigin, CorsLayer};
 
 use super::asset::ASSETS_MAP;
+use crate::ai::crud as ai;
 use crate::external::http::crud as http;
 use crate::flow::mainflow::crud as mainflow;
 use crate::flow::rt::facade as rt;
@@ -207,7 +208,7 @@ fn gen_router() -> Router {
         )
         .route(
             "/management/settings/model/download",
-            get(settings::download_model_files),
+            post(settings::download_model_files),
         )
         .route(
             "/management/settings/model/download/progress",
@@ -219,6 +220,7 @@ fn gen_router() -> Router {
         )
         .route("/management/settings/smtp/test", post(settings::smtp_test))
         .route("/flow/answer", post(rt::answer))
+        .route("/ai/text/generation", post(ai::gen_text))
         .route("/version.json", get(version))
         .route("/check-new-version.json", get(check_new_version))
         // .route("/o", get(subflow::output))

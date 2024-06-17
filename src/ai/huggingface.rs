@@ -4,11 +4,11 @@ use std::sync::{Mutex, OnceLock};
 use candle::{DType, Device, IndexOp, Tensor};
 use candle_nn::VarBuilder;
 use candle_transformers::models::bert::{BertModel, Config, HiddenAct, DTYPE};
-use candle_transformers::models::llama::{
-    Cache as LlamaCache, Config as LlamaConfig, Llama, LlamaConfig as LlamaTemporaryConfig,
-};
+use candle_transformers::models::gemma::{Config as GemmaConfig, Model as GemmaModel};
+use candle_transformers::models::llama::{Cache as LlamaCache, Llama, LlamaConfig};
 use candle_transformers::models::phi3::{Config as Phi3Config, Model as Phi3};
 use futures_util::StreamExt;
+use reqwest::header::{HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
 use tokenizers::{AddedToken, PaddingParams, PaddingStrategy, Tokenizer, TruncationParams};
 use tokio::fs::OpenOptions;
@@ -16,7 +16,7 @@ use tokio::io::AsyncWriteExt;
 
 use crate::result::{Error, Result};
 
-#[derive(Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub(crate) enum HuggingFaceModel {
     AllMiniLML6V2,
     ParaphraseMLMiniLML12V2,
@@ -31,11 +31,16 @@ pub(crate) enum HuggingFaceModel {
     MultilingualE5Large,
     MxbaiEmbedLargeV1,
     Phi3Mini4kInstruct,
+    TinyLlama1_1bChatV1_0,
+    Gemma2bInstruct,
+    Gemma7bInstruct,
 }
 
-#[derive(Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, PartialEq)]
 pub(crate) enum HuggingFaceModelType {
     Bert,
+    Llama,
+    Gemma,
     Phi3,
 }
 
@@ -45,7 +50,7 @@ pub(crate) enum HuggingFaceModelType {
 // }
 
 pub(crate) struct HuggingFaceModelInfo {
-    mode_type: HuggingFaceModelType,
+    pub(super) mode_type: HuggingFaceModelType,
     pub(crate) repository: &'static str,
     mirror: &'static str,
     model_files: Vec<&'static str>,
@@ -195,7 +200,64 @@ impl HuggingFaceModel {
                 dimenssions: 1024,
                 mode_type: HuggingFaceModelType::Phi3,
             },
+            HuggingFaceModel::TinyLlama1_1bChatV1_0 => HuggingFaceModelInfo {
+                repository: "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                mirror: "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                model_files: get_common_model_files(),
+                model_index_file: "",
+                tokenizer_filename: "tokenizer.json",
+                dimenssions: 1024,
+                mode_type: HuggingFaceModelType::Llama,
+            },
+            HuggingFaceModel::Gemma2bInstruct => HuggingFaceModelInfo {
+                repository: "google/gemma-2b-it",
+                mirror: "google/gemma-2b-it",
+                model_files: {
+                    let mut v = get_common_model_files();
+                    let mut idx = 0usize;
+                    for &f in v.iter() {
+                        if f.eq("model.safetensors") {
+                            break;
+                        }
+                        idx = idx + 1;
+                    }
+                    v.remove(idx);
+                    v
+                },
+                model_index_file: "model.safetensors.index.json",
+                tokenizer_filename: "tokenizer.json",
+                dimenssions: 1024,
+                mode_type: HuggingFaceModelType::Gemma,
+            },
+            HuggingFaceModel::Gemma7bInstruct => HuggingFaceModelInfo {
+                repository: "google/gemma-7b-it",
+                mirror: "google/gemma-7b-it",
+                model_files: {
+                    let mut v = get_common_model_files();
+                    let mut idx = 0usize;
+                    for &f in v.iter() {
+                        if f.eq("model.safetensors") {
+                            break;
+                        }
+                        idx = idx + 1;
+                    }
+                    v.remove(idx);
+                    v
+                },
+                model_index_file: "model.safetensors.index.json",
+                tokenizer_filename: "tokenizer.json",
+                dimenssions: 1024,
+                mode_type: HuggingFaceModelType::Gemma,
+            },
         }
+    }
+}
+
+impl std::fmt::Display for HuggingFaceModel {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+        // or, alternatively:
+        // fmt::Debug::fmt(self, f)
     }
 }
 
@@ -258,6 +320,7 @@ fn download_status<'l>() -> Result<std::sync::MutexGuard<'l, DownloadStatus>> {
 
 pub(crate) async fn download_hf_models(
     info: &HuggingFaceModelInfo,
+    huggingface_token: &str,
     connect_timeout: u64,
     read_timeout: u64,
 ) -> Result<()> {
@@ -289,9 +352,24 @@ pub(crate) async fn download_hf_models(
     }
     let root_path = format!("{}{}", HUGGING_FACE_MODEL_ROOT, info.repository);
     tokio::fs::create_dir_all(&root_path).await?;
+
+    let mut headers = HeaderMap::new();
+    let user_agent = format!(
+        "unkown/None; dialogflowchatbot/{}; rust/unknown",
+        crate::web::server::VERSION
+    );
+    headers.insert("User-Agent", HeaderValue::from_str(&user_agent)?);
+    if !huggingface_token.is_empty() {
+        headers.insert(
+            "Authorization",
+            HeaderValue::from_str(&format!("Bearer {huggingface_token}"))?,
+        );
+    }
+
     let mut builder = reqwest::Client::builder()
         .connect_timeout(Duration::from_millis(connect_timeout))
-        .read_timeout(Duration::from_millis(read_timeout));
+        .read_timeout(Duration::from_millis(read_timeout))
+        .default_headers(headers);
     if let Ok(proxy) = std::env::var("https_proxy") {
         if !proxy.is_empty() {
             log::info!("Detected proxy setting: {}", &proxy);
@@ -391,7 +469,7 @@ pub(super) fn construct_model_file_path(mirror: &str, f: &str) -> String {
     format!("{}{}/{}", HUGGING_FACE_MODEL_ROOT, mirror, f)
 }
 
-fn device() -> Result<Device> {
+pub(super) fn device() -> Result<Device> {
     if candle::utils::cuda_is_available() {
         Ok(Device::new_cuda(0)?)
     } else if candle::utils::metal_is_available() {
@@ -426,20 +504,41 @@ pub(crate) fn check_model_files(info: &HuggingFaceModelInfo) -> Result<bool> {
     //     return Ok(false)
     // }
     // if arch.as_str().unwrap().starts_with("Bert") {
-    if info.mode_type == HuggingFaceModelType::Bert {
-        return load_bert_model_files(&info.repository)
+    match info.mode_type {
+        HuggingFaceModelType::Bert => load_bert_model_files(&info.repository)
             .map(|_| true)
             .or_else(|e| {
-                log::warn!("Check model files failed,err: {:?}", &e);
+                log::warn!("Check bert model files failed,err: {:?}", &e);
                 Ok(false)
-            });
-    } else if info.mode_type == HuggingFaceModelType::Phi3 {
-        return load_phi3_model_files(&info).map(|_| true).or_else(|e| {
-            log::warn!("Check model files failed,err: {:?}", &e);
-            Ok(false)
-        });
+            }),
+        HuggingFaceModelType::Gemma => {
+            let device = device()?;
+            load_gemma_model_files(&info, &device)
+                .map(|_| true)
+                .or_else(|e| {
+                    log::warn!("Check gemma model files failed,err: {:?}", &e);
+                    Ok(false)
+                })
+        }
+        HuggingFaceModelType::Llama => {
+            let device = device()?;
+            load_llama_model_files(&info, &device)
+                .map(|_| true)
+                .or_else(|e| {
+                    log::warn!("Check llama model files failed,err: {:?}", &e);
+                    Ok(false)
+                })
+        }
+        HuggingFaceModelType::Phi3 => {
+            let device = device()?;
+            load_phi3_model_files(&info, &device)
+                .map(|_| true)
+                .or_else(|e| {
+                    log::warn!("Check phi3 model files failed,err: {:?}", &e);
+                    Ok(false)
+                })
+        }
     }
-    Ok(false)
 }
 
 fn init_tokenizer(repo: &str) -> Result<Tokenizer> {
@@ -570,8 +669,10 @@ fn load_safetensors(mirror: &str, json_file: &str) -> Result<Vec<String>> {
     Ok(Vec::from_iter(safetensors_files))
 }
 
-pub(crate) fn load_phi3_model_files(info: &HuggingFaceModelInfo) -> Result<Phi3> {
-    let device = device()?;
+pub(crate) fn load_phi3_model_files(
+    info: &HuggingFaceModelInfo,
+    device: &Device,
+) -> Result<(Phi3, Tokenizer)> {
     let dtype = if device.is_cuda() {
         DType::BF16
     } else {
@@ -581,33 +682,61 @@ pub(crate) fn load_phi3_model_files(info: &HuggingFaceModelInfo) -> Result<Phi3>
         .iter()
         .map(|v| std::path::PathBuf::from(construct_model_file_path(&info.mirror, v)))
         .collect::<Vec<_>>();
-    let vb = unsafe { VarBuilder::from_mmaped_safetensors(&filenames, dtype, &device)? };
+    let vb = unsafe { VarBuilder::from_mmaped_safetensors(&filenames, dtype, device)? };
     let config_filename = construct_model_file_path(&info.mirror, "config.json");
     let config = std::fs::read_to_string(config_filename)?;
     let config: Phi3Config = serde_json::from_str(&config)?;
     let phi3 = Phi3::new(&config, vb)?;
-    Ok(phi3)
+    let tokenizer = init_tokenizer(&info.repository)?;
+    Ok((phi3, tokenizer))
+}
+
+fn get_model_files(info: &HuggingFaceModelInfo) -> Result<Vec<String>> {
+    let f = if info.model_index_file.is_empty() {
+        vec![construct_model_file_path(&info.mirror, "model.safetensors")]
+    } else {
+        load_safetensors(&info.repository, &info.model_index_file)?
+            .iter()
+            .map(|v| construct_model_file_path(&info.mirror, v))
+            .collect::<Vec<_>>()
+    };
+    Ok(f)
 }
 
 pub(crate) fn load_llama_model_files(
     info: &HuggingFaceModelInfo,
+    device: &Device,
 ) -> Result<(Llama, LlamaCache, Tokenizer, Option<u32>)> {
     let tokenizer = init_tokenizer(&info.repository)?;
 
     let config_filename = construct_model_file_path(&info.repository, "config.json");
-    let config: LlamaTemporaryConfig = serde_json::from_slice(&std::fs::read(config_filename)?)?;
-    let config = config.into_config(true);
+    let config: LlamaConfig = serde_json::from_slice(&std::fs::read(config_filename)?)?;
+    let config = config.into_config(device.is_cuda());
     let eos_token_id = config
         .eos_token_id
         .or_else(|| tokenizer.token_to_id("</s>"));
-    let filenames = if info.model_index_file.is_empty() {
-        vec![String::from("model.safetensors")]
-    } else {
-        load_safetensors(&info.repository, &info.model_index_file)?
-    };
-    let device = device()?;
+    let filenames = get_model_files(info)?;
     let dtype = DType::F16;
-    let cache = LlamaCache::new(true, dtype, &config, &device)?;
-    let vb = unsafe { VarBuilder::from_mmaped_safetensors(&filenames, dtype, &device)? };
+    let cache = LlamaCache::new(true, dtype, &config, device)?;
+    let vb = unsafe { VarBuilder::from_mmaped_safetensors(&filenames, dtype, device)? };
     Ok((Llama::load(vb, &config)?, cache, tokenizer, eos_token_id))
+}
+
+pub(crate) fn load_gemma_model_files(
+    info: &HuggingFaceModelInfo,
+    device: &Device,
+) -> Result<(GemmaModel, Tokenizer)> {
+    let tokenizer = init_tokenizer(&info.repository)?;
+
+    let config_filename = construct_model_file_path(&info.repository, "config.json");
+    let config: GemmaConfig = serde_json::from_reader(std::fs::File::open(config_filename)?)?;
+    let dtype = if device.is_cuda() {
+        DType::BF16
+    } else {
+        DType::F32
+    };
+    let filenames = get_model_files(info)?;
+    let vb = unsafe { VarBuilder::from_mmaped_safetensors(&filenames, dtype, device)? };
+    let model = GemmaModel::new(device.is_cuda(), &config, vb)?;
+    Ok((model, tokenizer))
 }

@@ -78,10 +78,9 @@ fn hugging_face(robot_id: &str, info: &HuggingFaceModelInfo, s: &str) -> Result<
     //     Err(e) => return Err(Error::ErrorWithMessage(format!("{}", &e))),
     // };
     let tokens = match t.encode(s, true) {
-        Ok(t) => t,
+        Ok(t) => t.get_ids().to_vec(),
         Err(e) => return Err(Error::ErrorWithMessage(format!("{}", &e))),
     };
-    let tokens = tokens.get_ids().to_vec();
     let token_ids = Tensor::new(&tokens[..], &m.device)?.unsqueeze(0)?;
     let token_type_ids = token_ids.zeros_like()?;
     let outputs = m.forward(&token_ids, &token_type_ids)?;
