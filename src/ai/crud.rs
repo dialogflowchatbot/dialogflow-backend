@@ -15,6 +15,8 @@ pub(crate) struct Request {
 
 pub(crate) async fn gen_text(Json(q): Json<Request>) -> impl IntoResponse {
     if q.robot_id.is_empty() || q.prompt.is_empty() {}
-    completion::completion(&q.robot_id, "system_hint", &q.prompt).await;
+    if let Err(e) = completion::completion(&q.robot_id, "system_hint", &q.prompt).await{
+        log::error!("{:?}",&e);
+    }
     ""
 }

@@ -35,7 +35,7 @@ pub(crate) struct GlobalSettings {
     pub(crate) port: u16,
     #[serde(rename = "selectRandomPortWhenConflict")]
     pub(crate) select_random_port_when_conflict: bool,
-    #[serde(rename = "HfModelDownload")]
+    #[serde(rename = "hfModelDownload")]
     pub(crate) hf_model_download: HfModelDownload,
 }
 

@@ -67,6 +67,7 @@ fn huggingface(
     sample_len: usize,
 ) -> Result<()> {
     let info = m.get_info();
+    log::info!("mode_type={:?}",&info.mode_type);
     match info.mode_type {
         HuggingFaceModelType::Gemma => {
             super::gemma::gen_text(robot_id, &info, prompt, sample_len, None)?;

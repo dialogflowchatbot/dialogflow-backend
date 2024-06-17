@@ -15,7 +15,7 @@ name = "dialogflow"
 [dependencies]
 # artful = "0.1.1"
 anyhow = "1.0"
-axum = {version = "0.7", features = ["query","ws"]}
+axum = {version = "0.7", features = ["query"]}
 bigdecimal = "0.4"
 # candle-core = { git = "https://github.com/huggingface/candle.git", version = "0.5.1" }
 candle = { version = "0.5", package = "candle-core", default-features = false }
