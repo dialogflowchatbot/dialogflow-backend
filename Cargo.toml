@@ -15,7 +15,7 @@ name = "dialogflow"
 [dependencies]
 # artful = "0.1.1"
 anyhow = "1.0"
-axum = {version = "0.7", features = ["query"]}
+axum = {version = "0.7", features = ["query", "tokio"]}
 bigdecimal = "0.4"
 # candle-core = { git = "https://github.com/huggingface/candle.git", version = "0.5.1" }
 candle = { version = "0.5", package = "candle-core", default-features = false }
@@ -23,6 +23,7 @@ candle-nn = "0.5"
 # candle-onnx = "0.5"
 candle-transformers = { version = "0.5" }
 # candle-transformers = { version = "0.5", features = ["flash-attn"] }
+# crossbeam-channel = "0.5"
 frand = "0.10"
 tokenizers = "0.19"
 # candle_embed = "0.1"
@@ -31,6 +32,7 @@ colored = "2.1"
 enum_dispatch = "0.3"
 erased-serde = "0.4"
 #fastembed = "3.6"
+futures = "0.3"
 futures-util = "0.3"
 # hf-hub = { path = "./rslibs/hf-hub", default-features = false, features = ["tokio"] }
 itoa = "1.0"
@@ -56,6 +58,7 @@ time = { version = "0.3", features = ["formatting"] }
 tower-http = { version = "0.5", features = ["cors"] }
 # typetag = "0.2"
 tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "rt", "rt-multi-thread", "signal", "time"] }
+tokio-stream = "0.1"
 # tracing-subscriber = "0.3"
 log = "0.4"
 env_logger = "0.11"

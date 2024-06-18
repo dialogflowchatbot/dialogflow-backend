@@ -1,6 +1,8 @@
 use core::time::Duration;
+// use crossbeam_channel::Sender;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
+use tokio::sync::mpsc::Sender;
 
 use crate::ai::huggingface::{HuggingFaceModel, HuggingFaceModelType};
 use crate::man::settings;
@@ -27,20 +29,27 @@ pub(crate) fn replace_model_cache(robot_id: &str, m: &HuggingFaceModel) -> Resul
     }
 }
 
-pub(crate) async fn completion(robot_id: &str, system_hint: &str, prompt: &str) -> Result<String> {
+pub(crate) async fn completion(robot_id: &str, prompt: &str, sender: Sender<String>) -> Result<()> {
     if let Some(settings) = settings::get_settings(robot_id)? {
         match settings.text_generation_provider.provider {
             TextGenerationProvider::HuggingFace(m) => {
-                huggingface(robot_id, &m, prompt, 10000)?;
-                Ok(String::from("TextGeneration"))
+                huggingface(
+                    robot_id,
+                    &m,
+                    prompt,
+                    settings.text_generation_provider.max_response_token_length as usize,
+                    sender,
+                )
+                .await?;
+                Ok(())
             }
             TextGenerationProvider::OpenAI(m) => {
                 open_ai(
                     &m,
-                    system_hint,
                     prompt,
                     settings.text_generation_provider.connect_timeout_millis,
                     settings.text_generation_provider.read_timeout_millis,
+                    sender,
                 )
                 .await
             }
@@ -51,29 +60,34 @@ pub(crate) async fn completion(robot_id: &str, system_hint: &str, prompt: &str) 
                     prompt,
                     settings.text_generation_provider.connect_timeout_millis,
                     settings.text_generation_provider.read_timeout_millis,
+                    settings.text_generation_provider.max_response_token_length,
+                    sender,
                 )
                 .await
             }
         }
     } else {
-        Ok(String::new())
+        Err(Error::ErrorWithMessage(format!(
+            "Can NOT retrieve settings from robot_id: {robot_id}"
+        )))
     }
 }
 
-fn huggingface(
+async fn huggingface(
     robot_id: &str,
     m: &HuggingFaceModel,
     prompt: &str,
     sample_len: usize,
+    sender: Sender<String>,
 ) -> Result<()> {
     let info = m.get_info();
-    log::info!("mode_type={:?}",&info.mode_type);
+    log::info!("mode_type={:?}", &info.mode_type);
     match info.mode_type {
         HuggingFaceModelType::Gemma => {
-            super::gemma::gen_text(robot_id, &info, prompt, sample_len, None)?;
+            super::gemma::gen_text(robot_id, &info, prompt, sample_len, None, sender).await?;
         }
         HuggingFaceModelType::Llama => {
-            super::llama::gen_text(robot_id, &info, prompt, sample_len, None, None)?;
+            super::llama::gen_text(robot_id, &info, prompt, sample_len, None, None, sender).await?;
         }
         _ => todo!(),
     }
@@ -82,18 +96,18 @@ fn huggingface(
 
 async fn open_ai(
     m: &str,
-    system_hint: &str,
     s: &str,
     connect_timeout_millis: u16,
     read_timeout_millis: u16,
-) -> Result<String> {
+    sender: Sender<String>,
+) -> Result<()> {
     let client = reqwest::Client::builder()
         .connect_timeout(Duration::from_millis(connect_timeout_millis.into()))
         .read_timeout(Duration::from_millis(read_timeout_millis.into()))
         .build()?;
     let mut message0 = Map::new();
     message0.insert(String::from("role"), Value::from("system"));
-    message0.insert(String::from("content"), Value::from(system_hint));
+    message0.insert(String::from("content"), Value::from("system_hint"));
     let mut message1 = Map::new();
     message1.insert(String::from("role"), Value::from("user"));
     message1.insert(String::from("content"), Value::from(s));
@@ -128,7 +142,7 @@ async fn open_ai(
             }
         }
     }
-    Ok(String::new())
+    Ok(())
 }
 
 async fn ollama(
@@ -137,7 +151,9 @@ async fn ollama(
     s: &str,
     connect_timeout_millis: u16,
     read_timeout_millis: u16,
-) -> Result<String> {
+    sample_len: u32,
+    sender: Sender<String>,
+) -> Result<()> {
     let client = reqwest::Client::builder()
         .connect_timeout(Duration::from_millis(connect_timeout_millis.into()))
         .read_timeout(Duration::from_millis(read_timeout_millis.into()))
@@ -145,6 +161,11 @@ async fn ollama(
     let mut map = Map::new();
     map.insert(String::from("prompt"), Value::String(String::from(s)));
     map.insert(String::from("model"), Value::String(String::from(m)));
+
+    let mut num_predict = Map::new();
+    num_predict.insert(String::from("num_predict"), Value::from(sample_len));
+
+    map.insert(String::from("options"), Value::from(num_predict));
     let obj = Value::Object(map);
     let req = client.post(u).body(serde_json::to_string(&obj)?);
     let b = req
@@ -159,5 +180,5 @@ async fn ollama(
     } else {
         ""
     };
-    Ok(String::from(s))
+    Ok(())
 }

@@ -104,6 +104,8 @@ pub(crate) struct TextGenerationProvider {
     pub(crate) connect_timeout_millis: u16,
     #[serde(rename = "readTimeoutMillis")]
     pub(crate) read_timeout_millis: u16,
+    #[serde(rename = "maxResponseTokenLength")]
+    pub(crate) max_response_token_length: u32,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -141,13 +143,14 @@ impl Default for Settings {
             max_session_idle_sec: 1800,
             text_generation_provider: TextGenerationProvider {
                 provider: completion::TextGenerationProvider::HuggingFace(
-                    huggingface::HuggingFaceModel::Phi3Mini4kInstruct,
+                    huggingface::HuggingFaceModel::TinyLlama1_1bChatV1_0,
                 ),
                 api_url: String::new(),
                 api_key: String::new(),
                 model: String::new(),
                 connect_timeout_millis: 1500,
                 read_timeout_millis: 3000,
+                max_response_token_length: 2000,
             },
             sentence_embedding_provider: SentenceEmbeddingProvider {
                 provider: embedding::SentenceEmbeddingProvider::HuggingFace(

@@ -5,8 +5,10 @@ use std::sync::{Mutex, OnceLock};
 use candle::{DType, Tensor};
 use candle_transformers::generation::LogitsProcessor;
 use candle_transformers::models::gemma::Model as GemmaModel;
+// use crossbeam_channel::Sender;
 use frand::Rand;
 use tokenizers::Tokenizer;
+use tokio::sync::mpsc::Sender;
 
 use super::huggingface::{device, load_gemma_model_files, HuggingFaceModelInfo};
 use crate::result::{Error, Result};
@@ -25,12 +27,13 @@ pub(super) fn replace_model_cache(robot_id: &str, info: &HuggingFaceModelInfo) -
     Ok(())
 }
 
-pub(super) fn gen_text(
+pub(super) async fn gen_text(
     robot_id: &str,
     info: &HuggingFaceModelInfo,
     prompt: &str,
     sample_len: usize,
     top_p: Option<f64>,
+    sender: Sender<String>,
 ) -> Result<()> {
     let device = device()?;
     let lock = TEXT_GENERATION_MODEL.get_or_init(|| Mutex::new(HashMap::with_capacity(32)));
@@ -88,13 +91,20 @@ pub(super) fn gen_text(
             break;
         }
         if let Some(t) = tokenizer.next_token(next_token)? {
-            print!("{t}");
-            std::io::stdout().flush()?;
+            // print!("{t}");
+            // std::io::stdout().flush()?;
+            if let Err(e) = sender.send(t).await {
+                log::warn!("Sent failed, maybe receiver dropped, err: {:?}", &e);
+                break;
+            }
         }
     }
     let dt = start_gen.elapsed();
     if let Some(rest) = tokenizer.decode_rest()? {
-        print!("{rest}");
+        // print!("{rest}");
+        if let Err(e) = sender.send(rest).await {
+            log::warn!("Sent failed, maybe receiver dropped, err: {:?}", &e);
+        }
     }
     std::io::stdout().flush()?;
     println!(
