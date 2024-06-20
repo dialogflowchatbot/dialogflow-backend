@@ -150,7 +150,7 @@ impl Default for Settings {
                 model: String::new(),
                 connect_timeout_millis: 1500,
                 read_timeout_millis: 3000,
-                max_response_token_length: 2000,
+                max_response_token_length: 10,
             },
             sentence_embedding_provider: SentenceEmbeddingProvider {
                 provider: embedding::SentenceEmbeddingProvider::HuggingFace(

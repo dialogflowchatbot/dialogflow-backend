@@ -27,7 +27,7 @@ pub(super) fn replace_model_cache(robot_id: &str, info: &HuggingFaceModelInfo) -
     Ok(())
 }
 
-pub(super) async fn gen_text(
+pub(super) fn gen_text(
     robot_id: &str,
     info: &HuggingFaceModelInfo,
     prompt: &str,
@@ -63,6 +63,7 @@ pub(super) async fn gen_text(
     let repeat_penalty = 1.1f32;
     let repeat_last_n = 64usize;
     let start_gen = std::time::Instant::now();
+    let mut model = model.clone();
     for index in 0..sample_len {
         let context_size = if index > 0 { 1 } else { tokens.len() };
         let start_pos = tokens.len().saturating_sub(context_size);
@@ -93,8 +94,11 @@ pub(super) async fn gen_text(
         if let Some(t) = tokenizer.next_token(next_token)? {
             // print!("{t}");
             // std::io::stdout().flush()?;
-            if let Err(e) = sender.send(t).await {
-                log::warn!("Sent failed, maybe receiver dropped, err: {:?}", &e);
+            if let Err(e) = sender.try_send(t) {
+                log::warn!(
+                    "Sent failed, maybe receiver dropped or queue was full, err: {:?}",
+                    &e
+                );
                 break;
             }
         }
@@ -102,8 +106,11 @@ pub(super) async fn gen_text(
     let dt = start_gen.elapsed();
     if let Some(rest) = tokenizer.decode_rest()? {
         // print!("{rest}");
-        if let Err(e) = sender.send(rest).await {
-            log::warn!("Sent failed, maybe receiver dropped, err: {:?}", &e);
+        if let Err(e) = sender.try_send(rest) {
+            log::warn!(
+                "Sent failed, maybe receiver dropped or queue was full, err: {:?}",
+                &e
+            );
         }
     }
     std::io::stdout().flush()?;

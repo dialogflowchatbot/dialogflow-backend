@@ -2,8 +2,8 @@ use core::time::Duration;
 use std::convert::Infallible;
 use std::result::Result;
 
+use axum::body::Bytes;
 use axum::response::sse::{Event, Sse};
-use axum::Json;
 // use crossbeam_channel::bounded;
 use futures::future::Either;
 use futures::stream::{self, Stream};
@@ -20,25 +20,31 @@ pub(crate) struct Request {
     pub(crate) prompt: String,
 }
 
-pub(crate) async fn gen_text(
-    Json(q): Json<Request>,
-) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+pub(crate) async fn gen_text(bytes: Bytes) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+    let q: Request = serde_json::from_slice(bytes.as_ref()).unwrap();
     let stream = if q.robot_id.is_empty() || q.prompt.is_empty() {
-        Either::Left(stream::once(futures::future::ready(Ok(
-            Event::default().data("Invalid robot_id or prompt")
-        ))))
+        Either::Left(stream::once(futures::future::ready(
+            Ok::<Event, Infallible>(Event::default().data("Invalid robot_id or prompt")),
+        )))
     } else {
         // let (sender, receiver) = bounded::<String>(1);
-        let (sender, receiver) = mpsc::channel::<String>(1);
+        // Either::Right(stream::once(futures::future::ready(Ok::<Event, Infallible>(
+        //     Event::default().data("Invalid robot_id or prompt")
+        // ))))
+        let (sender, receiver) = mpsc::channel::<String>(50);
         let stream = ReceiverStream::new(receiver);
-        if let Err(e) = completion::completion(&q.robot_id, &q.prompt, sender).await {
-            log::error!("{:?}", &e);
-        }
-        Either::Right(stream.map(|s| Ok(Event::default().data(s))))
+        // let robot_id=q.robot_id.clone();
+        // let prompt=q.prompt.clone();
+        tokio::spawn(async move {
+            if let Err(e) = completion::completion(&q.robot_id, &q.prompt, sender).await {
+                log::error!("{:?}", &e);
+            }
+        });
+        Either::Right(stream.map(|s| Ok::<Event, Infallible>(Event::default().data(s))))
     };
     Sse::new(stream).keep_alive(
         axum::response::sse::KeepAlive::new()
-            .interval(Duration::from_secs(10))
+            .interval(Duration::from_secs(30))
             .text("keep-alive-text"),
     )
 }

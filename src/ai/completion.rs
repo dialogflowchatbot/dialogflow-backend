@@ -73,6 +73,17 @@ pub(crate) async fn completion(robot_id: &str, prompt: &str, sender: Sender<Stri
     }
 }
 
+pub(in crate::ai) fn send(sender: &Sender<String>, message: String) -> Result<()> {
+    if let Err(e) = sender.try_send(message) {
+        match e {
+            tokio::sync::mpsc::error::TrySendError::Full(m) => Ok(sender.blocking_send(m)?),
+            tokio::sync::mpsc::error::TrySendError::Closed(_) => Err(e.into()),
+        }
+    } else {
+        Ok(())
+    }
+}
+
 async fn huggingface(
     robot_id: &str,
     m: &HuggingFaceModel,
@@ -84,14 +95,20 @@ async fn huggingface(
     log::info!("mode_type={:?}", &info.mode_type);
     match info.mode_type {
         HuggingFaceModelType::Gemma => {
-            super::gemma::gen_text(robot_id, &info, prompt, sample_len, None, sender).await?;
+            super::gemma::gen_text(robot_id, &info, prompt, sample_len, None, sender)
         }
         HuggingFaceModelType::Llama => {
-            super::llama::gen_text(robot_id, &info, prompt, sample_len, None, None, sender).await?;
+            super::llama::gen_text(robot_id, &info, prompt, sample_len, None, None, sender)
         }
-        _ => todo!(),
+        HuggingFaceModelType::Phi3 => {
+            super::phi3::gen_text(robot_id, &info, prompt, sample_len, None, sender)
+        }
+        HuggingFaceModelType::Bert => Err(Error::ErrorWithMessage(format!(
+            "Unsuported model type {:?}.",
+            &info.mode_type
+        ))),
     }
-    Ok(())
+    // Ok(())
 }
 
 async fn open_ai(

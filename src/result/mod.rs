@@ -153,6 +153,18 @@ impl From<candle::Error> for Error {
     }
 }
 
+impl<T> From<tokio::sync::mpsc::error::TrySendError<T>> for Error {
+    fn from(err: tokio::sync::mpsc::error::TrySendError<T>) -> Self {
+        Error::ErrorWithMessage(format!("Sent failed, err: {:?}", err))
+    }
+}
+
+impl<T> From<tokio::sync::mpsc::error::SendError<T>> for Error {
+    fn from(err: tokio::sync::mpsc::error::SendError<T>) -> Self {
+        Error::ErrorWithMessage(format!("Sent failed, err: {:?}", err))
+    }
+}
+
 impl<T> From<std::sync::PoisonError<T>> for Error {
     fn from(err: std::sync::PoisonError<T>) -> Self {
         Error::ErrorWithMessage(format!("{:?}", err))

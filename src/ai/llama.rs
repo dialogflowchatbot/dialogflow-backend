@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::io::Write;
+// use std::io::Write;
 use std::sync::{Mutex, OnceLock};
 
 use candle::Tensor;
@@ -28,7 +28,7 @@ pub(super) fn replace_model_cache(robot_id: &str, info: &HuggingFaceModelInfo) -
     Ok(())
 }
 
-pub(super) async fn gen_text(
+pub(super) fn gen_text(
     robot_id: &str,
     info: &HuggingFaceModelInfo,
     prompt: &str,
@@ -81,6 +81,8 @@ pub(super) async fn gen_text(
     let mut start_gen = std::time::Instant::now();
     let mut index_pos = 0;
     let mut token_generated = 0;
+    // let model = model.clone();
+    let mut cache = cache.clone();
     for index in 0..sample_len {
         let (context_size, context_index) = if cache.use_kv_cache && index > 0 {
             (1, index_pos)
@@ -92,7 +94,7 @@ pub(super) async fn gen_text(
         }
         let ctxt = &tokens[tokens.len().saturating_sub(context_size)..];
         let input = Tensor::new(ctxt, &device)?.unsqueeze(0)?;
-        let logits = model.forward(&input, context_index, cache)?;
+        let logits = model.forward(&input, context_index, &mut cache)?;
         let logits = logits.squeeze(0)?;
         let repeat_penalty = 1.1f32;
         let repeat_last_n = 128usize;
@@ -118,18 +120,25 @@ pub(super) async fn gen_text(
         if let Some(t) = tokenizer.next_token(next_token)? {
             // print!("{&t}");
             // std::io::stdout().flush()?;
-            if let Err(e) = sender.send(t).await {
-                log::warn!("Sent failed, maybe receiver dropped, err: {:?}", &e);
-                break;
-            }
+            // if let Err(e) = sender.try_send(t) {
+            //     log::warn!(
+            //         "Sent failed, maybe receiver dropped or queue was full, err: {:?}",
+            //         &e
+            //     );
+            //     break;
+            // }
+            super::completion::send(&sender, t)?;
         }
-        if let Some(rest) = tokenizer.decode_rest()? {
-            // log::info!("{}",&rest);
-            if let Err(e) = sender.send(rest).await {
-                log::warn!("Sent failed, maybe receiver dropped, err: {:?}", &e);
-                break;
-            }
-        }
+    }
+    if let Some(rest) = tokenizer.decode_rest()? {
+        // log::info!("{}",&rest);
+        // if let Err(e) = sender.try_send(rest) {
+        //     log::warn!(
+        //         "Sent failed, maybe receiver dropped or queue was full, err: {:?}",
+        //         &e
+        //     );
+        // }
+        super::completion::send(&sender, rest)?;
     }
     let dt = start_gen.elapsed();
     log::info!(
