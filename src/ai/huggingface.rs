@@ -1,13 +1,18 @@
 use core::time::Duration;
+use std::fs::{read, OpenOptions as StdOpenOptions};
+use std::io::Read;
+use std::path::Path;
 use std::sync::{Mutex, OnceLock};
+use std::vec::Vec;
 
-use candle::{DType, Device, IndexOp, Tensor};
+use candle::{DType, Device};
 use candle_nn::VarBuilder;
-use candle_transformers::models::bert::{BertModel, Config, HiddenAct, DTYPE};
+use candle_transformers::models::bert::{BertModel, Config, DTYPE};
 use candle_transformers::models::gemma::{Config as GemmaConfig, Model as GemmaModel};
 use candle_transformers::models::llama::{Cache as LlamaCache, Llama, LlamaConfig};
 use candle_transformers::models::phi3::{Config as Phi3Config, Model as Phi3};
 use futures_util::StreamExt;
+use regex::bytes;
 use reqwest::header::{HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
 use tokenizers::{AddedToken, PaddingParams, PaddingStrategy, Tokenizer, TruncationParams};
@@ -44,19 +49,85 @@ pub(crate) enum HuggingFaceModelType {
     Phi3,
 }
 
+#[derive(Deserialize, Serialize)]
+struct Prompt {
+    role: String,
+    content: String,
+}
+
 // enum LoadedHfModel {
 //     Bert(BertModel, Tokenizer),
 //     Phi3(Phi3),
 // }
 
 pub(crate) struct HuggingFaceModelInfo {
-    pub(super) mode_type: HuggingFaceModelType,
+    pub(super) model_type: HuggingFaceModelType,
     pub(crate) repository: &'static str,
     mirror: &'static str,
     model_files: Vec<&'static str>,
     model_index_file: &'static str,
     tokenizer_filename: &'static str,
     dimenssions: u32,
+}
+
+impl HuggingFaceModelInfo {
+    pub(super) fn convert_prompt(&self, s: &str) -> Result<String> {
+        let mut prompt: Vec<Prompt> = serde_json::from_str(s)?;
+        let mut system = String::new();
+        let mut user = String::new();
+        for p in prompt.iter_mut() {
+            if p.role.eq("system") {
+                std::mem::swap(&mut system, &mut p.content);
+            }
+            else if p.role.eq("user") {
+                std::mem::swap(&mut user, &mut p.content);
+            }
+        }
+        match self.model_type {
+            HuggingFaceModelType::Bert => todo!(),
+            HuggingFaceModelType::Llama => {
+                let mut p = String::with_capacity(s.len());
+                if !system.is_empty() {
+                    p.push_str("<|system|>\n");
+                    p.push_str(&system);
+                    p.push_str("</s>\n");
+                }
+                p.push_str("<|user|>\n");
+                p.push_str(&user);
+                p.push_str("</s>\n<|assistant|>");
+                // p.push_str("<|begin_of_text|>");
+                // if !system.is_empty() {
+                //     p.push_str("<|start_header_id|>system<|end_header_id|>");
+                //     p.push_str(&system);
+                //     p.push_str("<|eot_id|>");
+                // }
+                // p.push_str("<|start_header_id|>user<|end_header_id|>");
+                // p.push_str(&user);
+                // p.push_str("<|eot_id|><|start_header_id|>assistant<|end_header_id|><|eot_id|>");
+                Ok(p)
+            }
+            HuggingFaceModelType::Gemma => {
+                let mut p = String::with_capacity(s.len());
+                p.push_str("<bos><start_of_turn>user\n");
+                p.push_str(&user);
+                p.push_str("<end_of_turn>\n<start_of_turn>model");
+                Ok(p)
+            },
+            HuggingFaceModelType::Phi3 => {
+                let mut p = String::with_capacity(s.len());
+                p.push_str("<s>");
+                if !system.is_empty() {
+                    p.push_str("<|system|>\n");
+                    p.push_str(&system);
+                    p.push_str("<|end|>\n");
+                }
+                p.push_str("<|user|>\n");
+                p.push_str(&user);
+                p.push_str("<end>\n<|assistant|><end>");
+                Ok(p)
+            },
+        }
+    }
 }
 
 fn get_common_model_files() -> Vec<&'static str> {
@@ -79,7 +150,7 @@ impl HuggingFaceModel {
                 model_index_file: "",
                 tokenizer_filename: "tokenizer.json",
                 dimenssions: 384,
-                mode_type: HuggingFaceModelType::Bert,
+                model_type: HuggingFaceModelType::Bert,
             },
             HuggingFaceModel::ParaphraseMLMiniLML12V2 => HuggingFaceModelInfo {
                 repository: "sentence-transformers/paraphrase-MiniLM-L12-v2",
@@ -88,7 +159,7 @@ impl HuggingFaceModel {
                 model_index_file: "",
                 tokenizer_filename: "tokenizer.json",
                 dimenssions: 384,
-                mode_type: HuggingFaceModelType::Bert,
+                model_type: HuggingFaceModelType::Bert,
             },
             HuggingFaceModel::ParaphraseMLMpnetBaseV2 => HuggingFaceModelInfo {
                 repository: "sentence-transformers/paraphrase-multilingual-mpnet-base-v2",
@@ -97,7 +168,7 @@ impl HuggingFaceModel {
                 model_index_file: "",
                 tokenizer_filename: "tokenizer.json",
                 dimenssions: 768,
-                mode_type: HuggingFaceModelType::Bert,
+                model_type: HuggingFaceModelType::Bert,
             },
             HuggingFaceModel::BgeSmallEnV1_5 => HuggingFaceModelInfo {
                 repository: "BAAI/bge-small-en-v1.5",
@@ -106,7 +177,7 @@ impl HuggingFaceModel {
                 model_index_file: "",
                 tokenizer_filename: "tokenizer.json",
                 dimenssions: 384,
-                mode_type: HuggingFaceModelType::Bert,
+                model_type: HuggingFaceModelType::Bert,
             },
             HuggingFaceModel::BgeBaseEnV1_5 => HuggingFaceModelInfo {
                 repository: "BAAI/bge-base-en-v1.5",
@@ -115,7 +186,7 @@ impl HuggingFaceModel {
                 model_index_file: "",
                 tokenizer_filename: "tokenizer.json",
                 dimenssions: 768,
-                mode_type: HuggingFaceModelType::Bert,
+                model_type: HuggingFaceModelType::Bert,
             },
             HuggingFaceModel::BgeLargeEnV1_5 => HuggingFaceModelInfo {
                 repository: "BAAI/bge-large-en-v1.5",
@@ -124,7 +195,7 @@ impl HuggingFaceModel {
                 model_index_file: "",
                 tokenizer_filename: "tokenizer.json",
                 dimenssions: 1024,
-                mode_type: HuggingFaceModelType::Bert,
+                model_type: HuggingFaceModelType::Bert,
             },
             HuggingFaceModel::BgeM3 => HuggingFaceModelInfo {
                 repository: "BAAI/bge-m3",
@@ -133,7 +204,7 @@ impl HuggingFaceModel {
                 model_index_file: "",
                 tokenizer_filename: "tokenizer.json",
                 dimenssions: 1024,
-                mode_type: HuggingFaceModelType::Bert,
+                model_type: HuggingFaceModelType::Bert,
             },
             HuggingFaceModel::NomicEmbedTextV1_5 => HuggingFaceModelInfo {
                 repository: "nomic-ai/nomic-embed-text-v1.5",
@@ -142,7 +213,7 @@ impl HuggingFaceModel {
                 model_index_file: "",
                 tokenizer_filename: "tokenizer.json",
                 dimenssions: 768,
-                mode_type: HuggingFaceModelType::Bert,
+                model_type: HuggingFaceModelType::Bert,
             },
             HuggingFaceModel::MultilingualE5Small => HuggingFaceModelInfo {
                 repository: "intfloat/multilingual-e5-small",
@@ -151,7 +222,7 @@ impl HuggingFaceModel {
                 model_index_file: "",
                 tokenizer_filename: "tokenizer.json",
                 dimenssions: 384,
-                mode_type: HuggingFaceModelType::Bert,
+                model_type: HuggingFaceModelType::Bert,
             },
             HuggingFaceModel::MultilingualE5Base => HuggingFaceModelInfo {
                 repository: "intfloat/multilingual-e5-base",
@@ -160,7 +231,7 @@ impl HuggingFaceModel {
                 model_index_file: "",
                 tokenizer_filename: "tokenizer.json",
                 dimenssions: 768,
-                mode_type: HuggingFaceModelType::Bert,
+                model_type: HuggingFaceModelType::Bert,
             },
             HuggingFaceModel::MultilingualE5Large => HuggingFaceModelInfo {
                 repository: "intfloat/multilingual-e5-large",
@@ -169,7 +240,7 @@ impl HuggingFaceModel {
                 model_index_file: "",
                 tokenizer_filename: "tokenizer.json",
                 dimenssions: 1024,
-                mode_type: HuggingFaceModelType::Bert,
+                model_type: HuggingFaceModelType::Bert,
             },
             HuggingFaceModel::MxbaiEmbedLargeV1 => HuggingFaceModelInfo {
                 repository: "mixedbread-ai/mxbai-embed-large-v1",
@@ -178,7 +249,7 @@ impl HuggingFaceModel {
                 model_index_file: "",
                 tokenizer_filename: "tokenizer.json",
                 dimenssions: 1024,
-                mode_type: HuggingFaceModelType::Bert,
+                model_type: HuggingFaceModelType::Bert,
             },
             HuggingFaceModel::Phi3Mini4kInstruct => HuggingFaceModelInfo {
                 repository: "microsoft/Phi-3-mini-4k-instruct",
@@ -198,7 +269,7 @@ impl HuggingFaceModel {
                 model_index_file: "model.safetensors.index.json",
                 tokenizer_filename: "tokenizer.json",
                 dimenssions: 1024,
-                mode_type: HuggingFaceModelType::Phi3,
+                model_type: HuggingFaceModelType::Phi3,
             },
             HuggingFaceModel::TinyLlama1_1bChatV1_0 => HuggingFaceModelInfo {
                 repository: "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
@@ -207,7 +278,7 @@ impl HuggingFaceModel {
                 model_index_file: "",
                 tokenizer_filename: "tokenizer.json",
                 dimenssions: 1024,
-                mode_type: HuggingFaceModelType::Llama,
+                model_type: HuggingFaceModelType::Llama,
             },
             HuggingFaceModel::Gemma2bInstruct => HuggingFaceModelInfo {
                 repository: "google/gemma-2b-it",
@@ -227,7 +298,7 @@ impl HuggingFaceModel {
                 model_index_file: "model.safetensors.index.json",
                 tokenizer_filename: "tokenizer.json",
                 dimenssions: 1024,
-                mode_type: HuggingFaceModelType::Gemma,
+                model_type: HuggingFaceModelType::Gemma,
             },
             HuggingFaceModel::Gemma7bInstruct => HuggingFaceModelInfo {
                 repository: "google/gemma-7b-it",
@@ -247,7 +318,7 @@ impl HuggingFaceModel {
                 model_index_file: "model.safetensors.index.json",
                 tokenizer_filename: "tokenizer.json",
                 dimenssions: 1024,
-                mode_type: HuggingFaceModelType::Gemma,
+                model_type: HuggingFaceModelType::Gemma,
             },
         }
     }
@@ -504,41 +575,73 @@ pub(crate) fn check_model_files(info: &HuggingFaceModelInfo) -> Result<bool> {
     //     return Ok(false)
     // }
     // if arch.as_str().unwrap().starts_with("Bert") {
-    match info.mode_type {
-        HuggingFaceModelType::Bert => load_bert_model_files(&info.repository)
-            .map(|_| true)
-            .or_else(|e| {
-                log::warn!("Check bert model files failed,err: {:?}", &e);
-                Ok(false)
-            }),
-        HuggingFaceModelType::Gemma => {
-            let device = device()?;
-            load_gemma_model_files(&info, &device)
-                .map(|_| true)
-                .or_else(|e| {
-                    log::warn!("Check gemma model files failed,err: {:?}", &e);
-                    Ok(false)
-                })
+    let files = get_model_files(&info)?;
+    for f in files.iter() {
+        let p = Path::new(f);
+        if !p.exists() {
+            return Ok(false);
         }
-        HuggingFaceModelType::Llama => {
-            let device = device()?;
-            load_llama_model_files(&info, &device)
-                .map(|_| true)
-                .or_else(|e| {
-                    log::warn!("Check llama model files failed,err: {:?}", &e);
-                    Ok(false)
-                })
+        let ext = p.extension();
+        if ext.is_none() {
+            return Ok(false);
         }
-        HuggingFaceModelType::Phi3 => {
-            let device = device()?;
-            load_phi3_model_files(&info, &device)
-                .map(|_| true)
-                .or_else(|e| {
-                    log::warn!("Check phi3 model files failed,err: {:?}", &e);
-                    Ok(false)
-                })
+        let ext = ext.unwrap();
+        if ext.eq("json") {
+            // https://github.com/serde-rs/json/issues/160
+            // let file = StdOpenOptions::new().read(true).write(false).create(false).open(&f)?;
+            // let br = std::io::BufReader::with_capacity(4096, file);
+            // let _ = serde_json::from_reader(br)?;
+            let mut file = StdOpenOptions::new()
+                .read(true)
+                .write(false)
+                .create(false)
+                .open(&f)?;
+            let mut bytes = Vec::with_capacity(4096);
+            file.read_to_end(&mut bytes)?;
+            let _ = serde_json::from_slice(&bytes)?;
+        } else if ext.eq("safetensors") {
+            let metadata = std::fs::metadata(&p)?;
+            if metadata.len() < 62914560u64 {
+                return Ok(false);
+            }
         }
     }
+    Ok(true)
+    // match info.model_type {
+    //     HuggingFaceModelType::Bert => load_bert_model_files(&info.repository)
+    //         .map(|_| true)
+    //         .or_else(|e| {
+    //             log::warn!("Check bert model files failed,err: {:?}", &e);
+    //             Ok(false)
+    //         }),
+    //     HuggingFaceModelType::Gemma => {
+    //         let device = device()?;
+    //         load_gemma_model_files(&info, &device)
+    //             .map(|_| true)
+    //             .or_else(|e| {
+    //                 log::warn!("Check gemma model files failed,err: {:?}", &e);
+    //                 Ok(false)
+    //             })
+    //     }
+    //     HuggingFaceModelType::Llama => {
+    //         let device = device()?;
+    //         load_llama_model_files(&info, &device)
+    //             .map(|_| true)
+    //             .or_else(|e| {
+    //                 log::warn!("Check llama model files failed,err: {:?}", &e);
+    //                 Ok(false)
+    //             })
+    //     }
+    //     HuggingFaceModelType::Phi3 => {
+    //         let device = device()?;
+    //         load_phi3_model_files(&info, &device)
+    //             .map(|_| true)
+    //             .or_else(|e| {
+    //                 log::warn!("Check phi3 model files failed,err: {:?}", &e);
+    //                 Ok(false)
+    //             })
+    //     }
+    // }
 }
 
 fn init_tokenizer(repo: &str) -> Result<Tokenizer> {

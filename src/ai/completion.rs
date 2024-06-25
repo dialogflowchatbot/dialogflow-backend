@@ -8,6 +8,10 @@ use crate::ai::huggingface::{HuggingFaceModel, HuggingFaceModelType};
 use crate::man::settings;
 use crate::result::{Error, Result};
 
+pub(crate) const TEMPERATURE: f64=0.8;
+pub(crate) const REPEAT_PENALTY:f32=1.1;
+pub(crate) const REPEAT_LAST_N:usize = 64;
+
 #[derive(Deserialize, Serialize)]
 #[serde(tag = "id", content = "model")]
 pub(crate) enum TextGenerationProvider {
@@ -18,13 +22,13 @@ pub(crate) enum TextGenerationProvider {
 
 pub(crate) fn replace_model_cache(robot_id: &str, m: &HuggingFaceModel) -> Result<()> {
     let info = m.get_info();
-    match info.mode_type {
+    match info.model_type {
         HuggingFaceModelType::Llama => super::llama::replace_model_cache(robot_id, &info),
         HuggingFaceModelType::Gemma => super::gemma::replace_model_cache(robot_id, &info),
         HuggingFaceModelType::Phi3 => super::phi3::replace_model_cache(robot_id, &info),
         HuggingFaceModelType::Bert => Err(Error::ErrorWithMessage(format!(
             "Unsuported model type {:?}.",
-            &info.mode_type
+            &info.model_type
         ))),
     }
 }
@@ -92,20 +96,21 @@ async fn huggingface(
     sender: Sender<String>,
 ) -> Result<()> {
     let info = m.get_info();
-    log::info!("mode_type={:?}", &info.mode_type);
-    match info.mode_type {
+    log::info!("model_type={:?}", &info.model_type);
+    let new_prompt = info.convert_prompt(prompt)?;
+    match info.model_type {
         HuggingFaceModelType::Gemma => {
             super::gemma::gen_text(robot_id, &info, prompt, sample_len, None, sender)
         }
         HuggingFaceModelType::Llama => {
-            super::llama::gen_text(robot_id, &info, prompt, sample_len, None, None, sender)
+            super::llama::gen_text(robot_id, &info, &new_prompt, sample_len, None, None, sender)
         }
         HuggingFaceModelType::Phi3 => {
             super::phi3::gen_text(robot_id, &info, prompt, sample_len, None, sender)
         }
         HuggingFaceModelType::Bert => Err(Error::ErrorWithMessage(format!(
             "Unsuported model type {:?}.",
-            &info.mode_type
+            &info.model_type
         ))),
     }
     // Ok(())

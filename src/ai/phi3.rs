@@ -69,8 +69,8 @@ pub(super) fn gen_text(
     // std::io::stdout().flush()?;
     let start_gen = std::time::Instant::now();
     let mut pos = 0;
-    let repeat_penalty = 1.1f32;
-    let repeat_last_n = 64;
+    let repeat_penalty = 1.3f32;
+    let repeat_last_n = 150;
     let temperature = 0.8f64;
     let mut rng = Rand::new();
     let mut model = model.clone();

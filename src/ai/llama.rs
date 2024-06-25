@@ -59,26 +59,26 @@ pub(super) fn gen_text(
         Ok(t) => t.get_ids().to_vec(),
         Err(e) => return Err(Error::ErrorWithMessage(format!("{}", &e))),
     };
+    // log::info!("tokens len={}",tokens.len());
     let mut tokenizer = super::token_output_stream::TokenOutputStream::new(tokenizer.clone());
     log::info!("starting the inference loop");
     log::info!("{prompt}");
     let mut logits_processor = {
-        let temperature = 0.8f64;
-        let sampling = if temperature <= 0. {
+        let sampling = if super::completion::TEMPERATURE <= 0. {
             Sampling::ArgMax
         } else {
             match (top_k, top_p) {
-                (None, None) => Sampling::All { temperature },
-                (Some(k), None) => Sampling::TopK { k, temperature },
-                (None, Some(p)) => Sampling::TopP { p, temperature },
-                (Some(k), Some(p)) => Sampling::TopKThenTopP { k, p, temperature },
+                (None, None) => Sampling::All { temperature: super::completion::TEMPERATURE },
+                (Some(k), None) => Sampling::TopK { k, temperature: super::completion::TEMPERATURE },
+                (None, Some(p)) => Sampling::TopP { p, temperature: super::completion::TEMPERATURE },
+                (Some(k), Some(p)) => Sampling::TopKThenTopP { k, p, temperature: super::completion::TEMPERATURE },
             }
         };
         let mut rng = Rand::new();
         LogitsProcessor::from_sampling(rng.gen::<u64>(), sampling)
     };
     log::info!("logits_processor finished");
-    let mut start_gen = std::time::Instant::now();
+    let start_gen = std::time::Instant::now();
     let mut index_pos = 0;
     let mut token_generated = 0;
     // let model = model.clone();
@@ -89,22 +89,17 @@ pub(super) fn gen_text(
         } else {
             (tokens.len(), 0)
         };
-        if index == 1 {
-            start_gen = std::time::Instant::now()
-        }
         let ctxt = &tokens[tokens.len().saturating_sub(context_size)..];
         let input = Tensor::new(ctxt, &device)?.unsqueeze(0)?;
         let logits = model.forward(&input, context_index, &mut cache)?;
         let logits = logits.squeeze(0)?;
-        let repeat_penalty = 1.1f32;
-        let repeat_last_n = 128usize;
-        let logits = if repeat_penalty == 1. {
+        let logits = if super::completion::REPEAT_PENALTY == 1. {
             logits
         } else {
-            let start_at = tokens.len().saturating_sub(repeat_last_n);
+            let start_at = tokens.len().saturating_sub(super::completion::REPEAT_LAST_N);
             candle_transformers::utils::apply_repeat_penalty(
                 &logits,
-                repeat_penalty,
+                super::completion::REPEAT_PENALTY,
                 &tokens[start_at..],
             )?
         };
@@ -127,6 +122,8 @@ pub(super) fn gen_text(
             //     );
             //     break;
             // }
+            log::info!("gened t={}",&t);
+            sender.try_send(t.clone());
             super::completion::send(&sender, t)?;
         }
     }
@@ -138,6 +135,7 @@ pub(super) fn gen_text(
         //         &e
         //     );
         // }
+        log::info!("gened rest={}",&rest);
         super::completion::send(&sender, rest)?;
     }
     let dt = start_gen.elapsed();

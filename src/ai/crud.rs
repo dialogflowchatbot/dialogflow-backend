@@ -22,6 +22,7 @@ pub(crate) struct Request {
 
 pub(crate) async fn gen_text(bytes: Bytes) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     let q: Request = serde_json::from_slice(bytes.as_ref()).unwrap();
+    /*
     let stream = if q.robot_id.is_empty() || q.prompt.is_empty() {
         Either::Left(stream::once(futures::future::ready(
             Ok::<Event, Infallible>(Event::default().data("Invalid robot_id or prompt")),
@@ -31,7 +32,7 @@ pub(crate) async fn gen_text(bytes: Bytes) -> Sse<impl Stream<Item = Result<Even
         // Either::Right(stream::once(futures::future::ready(Ok::<Event, Infallible>(
         //     Event::default().data("Invalid robot_id or prompt")
         // ))))
-        let (sender, receiver) = mpsc::channel::<String>(50);
+        let (sender, receiver) = mpsc::channel::<String>(5);
         let stream = ReceiverStream::new(receiver);
         // let robot_id=q.robot_id.clone();
         // let prompt=q.prompt.clone();
@@ -47,4 +48,29 @@ pub(crate) async fn gen_text(bytes: Bytes) -> Sse<impl Stream<Item = Result<Even
             .interval(Duration::from_secs(30))
             .text("keep-alive-text"),
     )
+    */
+    let (sender, receiver) = mpsc::channel::<String>(5);
+    let stream = ReceiverStream::new(receiver).map(|s| Ok::<Event, Infallible>(Event::default().data(s)));
+    tokio::spawn(async move {
+        // loop {
+        //     let s = &sender;
+        //     s.try_send(String::from("123abc"));
+        //     tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        // }
+        if let Err(e) = completion::completion(&q.robot_id, &q.prompt, sender).await {
+            log::error!("{:?}", &e);
+        }
+    });
+    Sse::new(stream).keep_alive(
+        axum::response::sse::KeepAlive::new()
+            .interval(Duration::from_secs(30))
+            .text("keep-alive-text"),
+    )
+    // let stream = stream::repeat_with(|| Event::default().data("data"))
+    // .map(Ok).throttle(Duration::from_secs(1));
+    // Sse::new(stream).keep_alive(
+    //     axum::response::sse::KeepAlive::new()
+    //         .interval(std::time::Duration::from_secs(30))
+    //         .text("keep-alive-text"),
+    // )
 }

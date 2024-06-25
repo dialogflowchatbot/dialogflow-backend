@@ -60,8 +60,8 @@ pub(super) fn gen_text(
         }
     };
     let mut generated_tokens = 0usize;
-    let repeat_penalty = 1.1f32;
-    let repeat_last_n = 64usize;
+    let repeat_penalty = 1.3f32;
+    let repeat_last_n = 150usize;
     let start_gen = std::time::Instant::now();
     let mut model = model.clone();
     for index in 0..sample_len {
