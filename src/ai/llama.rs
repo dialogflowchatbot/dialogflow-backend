@@ -124,7 +124,7 @@ pub(super) fn gen_text(
             // }
             log::info!("gened t={}",&t);
             sender.try_send(t.clone());
-            super::completion::send(&sender, t)?;
+            super::completion::send(&sender, String::from(t.trim()))?;
         }
     }
     if let Some(rest) = tokenizer.decode_rest()? {

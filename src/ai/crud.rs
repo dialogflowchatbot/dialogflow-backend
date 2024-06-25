@@ -50,12 +50,16 @@ pub(crate) async fn gen_text(bytes: Bytes) -> Sse<impl Stream<Item = Result<Even
     )
     */
     let (sender, receiver) = mpsc::channel::<String>(5);
-    let stream = ReceiverStream::new(receiver).map(|s| Ok::<Event, Infallible>(Event::default().data(s)));
+    let stream = ReceiverStream::new(receiver).map(|s| {
+        log::info!("Sse sending {s}");
+        let event = Event::default().data(s);
+        Ok::<Event, Infallible>(event)
+    });
     tokio::spawn(async move {
         // loop {
         //     let s = &sender;
-        //     s.try_send(String::from("123abc"));
-        //     tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        //     s.try_send(String::from("\n1"));
+        //     tokio::time::sleep(std::time::Duration::from_secs(30)).await;
         // }
         if let Err(e) = completion::completion(&q.robot_id, &q.prompt, sender).await {
             log::error!("{:?}", &e);

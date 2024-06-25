@@ -69,25 +69,22 @@ pub(super) fn gen_text(
     // std::io::stdout().flush()?;
     let start_gen = std::time::Instant::now();
     let mut pos = 0;
-    let repeat_penalty = 1.3f32;
-    let repeat_last_n = 150;
-    let temperature = 0.8f64;
     let mut rng = Rand::new();
     let mut model = model.clone();
-    let mut logits_processor = LogitsProcessor::new(rng.gen::<u64>(), Some(temperature), top_p);
+    let mut logits_processor = LogitsProcessor::new(rng.gen::<u64>(), Some(super::completion::TEMPERATURE), top_p);
     for index in 0..sample_len {
         let context_size = if index > 0 { 1 } else { tokens.len() };
         let ctxt = &tokens[tokens.len().saturating_sub(context_size)..];
         let input = Tensor::new(ctxt, &device)?.unsqueeze(0)?;
         let logits = model.forward(&input, pos)?.i((.., 0, ..))?;
         let logits = logits.squeeze(0)?.to_dtype(DType::F32)?;
-        let logits = if repeat_penalty == 1. {
+        let logits = if super::completion::REPEAT_PENALTY == 1. {
             logits
         } else {
-            let start_at = tokens.len().saturating_sub(repeat_last_n);
+            let start_at = tokens.len().saturating_sub(super::completion::REPEAT_LAST_N);
             candle_transformers::utils::apply_repeat_penalty(
                 &logits,
-                repeat_penalty,
+                super::completion::REPEAT_PENALTY,
                 &tokens[start_at..],
             )?
         };
