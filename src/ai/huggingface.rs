@@ -78,8 +78,7 @@ impl HuggingFaceModelInfo {
         for p in prompt.iter_mut() {
             if p.role.eq("system") {
                 std::mem::swap(&mut system, &mut p.content);
-            }
-            else if p.role.eq("user") {
+            } else if p.role.eq("user") {
                 std::mem::swap(&mut user, &mut p.content);
             }
         }
@@ -112,7 +111,7 @@ impl HuggingFaceModelInfo {
                 p.push_str(&user);
                 p.push_str("<end_of_turn>\n<start_of_turn>model");
                 Ok(p)
-            },
+            }
             HuggingFaceModelType::Phi3 => {
                 let mut p = String::with_capacity(s.len());
                 p.push_str("<s>");
@@ -125,7 +124,7 @@ impl HuggingFaceModelInfo {
                 p.push_str(&user);
                 p.push_str("<end>\n<|assistant|><end>");
                 Ok(p)
-            },
+            }
         }
     }
 }

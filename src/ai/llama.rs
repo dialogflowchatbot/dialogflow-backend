@@ -68,10 +68,22 @@ pub(super) fn gen_text(
             Sampling::ArgMax
         } else {
             match (top_k, top_p) {
-                (None, None) => Sampling::All { temperature: super::completion::TEMPERATURE },
-                (Some(k), None) => Sampling::TopK { k, temperature: super::completion::TEMPERATURE },
-                (None, Some(p)) => Sampling::TopP { p, temperature: super::completion::TEMPERATURE },
-                (Some(k), Some(p)) => Sampling::TopKThenTopP { k, p, temperature: super::completion::TEMPERATURE },
+                (None, None) => Sampling::All {
+                    temperature: super::completion::TEMPERATURE,
+                },
+                (Some(k), None) => Sampling::TopK {
+                    k,
+                    temperature: super::completion::TEMPERATURE,
+                },
+                (None, Some(p)) => Sampling::TopP {
+                    p,
+                    temperature: super::completion::TEMPERATURE,
+                },
+                (Some(k), Some(p)) => Sampling::TopKThenTopP {
+                    k,
+                    p,
+                    temperature: super::completion::TEMPERATURE,
+                },
             }
         };
         let mut rng = Rand::new();
@@ -96,7 +108,9 @@ pub(super) fn gen_text(
         let logits = if super::completion::REPEAT_PENALTY == 1. {
             logits
         } else {
-            let start_at = tokens.len().saturating_sub(super::completion::REPEAT_LAST_N);
+            let start_at = tokens
+                .len()
+                .saturating_sub(super::completion::REPEAT_LAST_N);
             candle_transformers::utils::apply_repeat_penalty(
                 &logits,
                 super::completion::REPEAT_PENALTY,
@@ -122,9 +136,10 @@ pub(super) fn gen_text(
             //     );
             //     break;
             // }
-            log::info!("gened t={}",&t);
-            sender.try_send(t.clone());
-            super::completion::send(&sender, String::from(t.trim()))?;
+            sender.try_send(String::from("1"));
+            log::info!("gened t={}", &t);
+            // sender.try_send(t.clone());
+            // super::completion::send(&sender, String::from(t.trim()))?;
         }
     }
     if let Some(rest) = tokenizer.decode_rest()? {
@@ -135,7 +150,7 @@ pub(super) fn gen_text(
         //         &e
         //     );
         // }
-        log::info!("gened rest={}",&rest);
+        log::info!("gened rest={}", &rest);
         super::completion::send(&sender, rest)?;
     }
     let dt = start_gen.elapsed();

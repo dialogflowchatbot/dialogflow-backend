@@ -72,7 +72,9 @@ pub(super) fn gen_text(
         let logits = if super::completion::REPEAT_PENALTY == 1. {
             logits
         } else {
-            let start_at = tokens.len().saturating_sub(super::completion::REPEAT_LAST_N);
+            let start_at = tokens
+                .len()
+                .saturating_sub(super::completion::REPEAT_LAST_N);
             candle_transformers::utils::apply_repeat_penalty(
                 &logits,
                 super::completion::REPEAT_PENALTY,
@@ -81,7 +83,11 @@ pub(super) fn gen_text(
         };
 
         let mut rng = Rand::new();
-        let mut logits_processor = LogitsProcessor::new(rng.gen::<u64>(), Some(super::completion::TEMPERATURE), top_p);
+        let mut logits_processor = LogitsProcessor::new(
+            rng.gen::<u64>(),
+            Some(super::completion::TEMPERATURE),
+            top_p,
+        );
         let next_token = logits_processor.sample(&logits)?;
         tokens.push(next_token);
         generated_tokens += 1;

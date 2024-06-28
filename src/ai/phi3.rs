@@ -71,7 +71,11 @@ pub(super) fn gen_text(
     let mut pos = 0;
     let mut rng = Rand::new();
     let mut model = model.clone();
-    let mut logits_processor = LogitsProcessor::new(rng.gen::<u64>(), Some(super::completion::TEMPERATURE), top_p);
+    let mut logits_processor = LogitsProcessor::new(
+        rng.gen::<u64>(),
+        Some(super::completion::TEMPERATURE),
+        top_p,
+    );
     for index in 0..sample_len {
         let context_size = if index > 0 { 1 } else { tokens.len() };
         let ctxt = &tokens[tokens.len().saturating_sub(context_size)..];
@@ -81,7 +85,9 @@ pub(super) fn gen_text(
         let logits = if super::completion::REPEAT_PENALTY == 1. {
             logits
         } else {
-            let start_at = tokens.len().saturating_sub(super::completion::REPEAT_LAST_N);
+            let start_at = tokens
+                .len()
+                .saturating_sub(super::completion::REPEAT_LAST_N);
             candle_transformers::utils::apply_repeat_penalty(
                 &logits,
                 super::completion::REPEAT_PENALTY,

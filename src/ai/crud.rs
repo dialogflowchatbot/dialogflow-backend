@@ -20,6 +20,14 @@ pub(crate) struct Request {
     pub(crate) prompt: String,
 }
 
+async fn ttt(sender: tokio::sync::mpsc::Sender<String>) {
+    for _ in 0..5 {
+        let s = &sender;
+        s.try_send(String::from("1"));
+        tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+    }
+}
+
 pub(crate) async fn gen_text(bytes: Bytes) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     let q: Request = serde_json::from_slice(bytes.as_ref()).unwrap();
     /*
@@ -56,11 +64,7 @@ pub(crate) async fn gen_text(bytes: Bytes) -> Sse<impl Stream<Item = Result<Even
         Ok::<Event, Infallible>(event)
     });
     tokio::spawn(async move {
-        // loop {
-        //     let s = &sender;
-        //     s.try_send(String::from("\n1"));
-        //     tokio::time::sleep(std::time::Duration::from_secs(30)).await;
-        // }
+        // ttt(sender).await;
         if let Err(e) = completion::completion(&q.robot_id, &q.prompt, sender).await {
             log::error!("{:?}", &e);
         }
