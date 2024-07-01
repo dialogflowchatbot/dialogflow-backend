@@ -21,7 +21,7 @@ bigdecimal = "0.4"
 candle = { version = "0.5", package = "candle-core", default-features = false }
 candle-nn = "0.5"
 # candle-onnx = "0.5"
-candle-transformers = { version = "0.5" }
+candle-transformers = { version = "0.6" }
 # candle-transformers = { version = "0.5", features = ["flash-attn"] }
 # crossbeam-channel = "0.5"
 frand = "0.10"
