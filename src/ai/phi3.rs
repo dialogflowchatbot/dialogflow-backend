@@ -31,7 +31,7 @@ pub(super) fn gen_text(
     prompt: &str,
     sample_len: usize,
     top_p: Option<f64>,
-    sender: Sender<String>,
+    sender: &Sender<String>,
 ) -> Result<()> {
     let device = device()?;
     let lock = TEXT_GENERATION_MODEL.get_or_init(|| Mutex::new(HashMap::with_capacity(32)));
@@ -99,6 +99,9 @@ pub(super) fn gen_text(
         tokens.push(next_token);
         generated_tokens += 1;
         if next_token == eos_token {
+            if let Some(t) = tokenizer.decode_rest()? {
+                super::completion::send(&sender, t)?;
+            }
             break;
         }
         if let Some(t) = tokenizer.next_token(next_token)? {

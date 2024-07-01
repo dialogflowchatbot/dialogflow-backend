@@ -35,7 +35,7 @@ pub(super) fn gen_text(
     sample_len: usize,
     top_k: Option<usize>,
     top_p: Option<f64>,
-    sender: Sender<String>,
+    sender: &Sender<String>,
 ) -> Result<()> {
     let device = device()?;
     let lock = TEXT_GENERATION_MODEL.get_or_init(|| Mutex::new(HashMap::with_capacity(32)));
@@ -136,8 +136,15 @@ pub(super) fn gen_text(
             //     );
             //     break;
             // }
-            sender.try_send(String::from("1"));
-            log::info!("gened t={}", &t);
+            if sender.is_closed() {
+                break;
+            }
+            let sender = sender.clone();
+            tokio::spawn(async move {
+                if let Err(e) = sender.send(t).await {
+                    log::warn!("Failed sending LLM result, err: {:?}", &e);
+                }
+            });
             // sender.try_send(t.clone());
             // super::completion::send(&sender, String::from(t.trim()))?;
         }
@@ -150,8 +157,13 @@ pub(super) fn gen_text(
         //         &e
         //     );
         // }
-        log::info!("gened rest={}", &rest);
-        super::completion::send(&sender, rest)?;
+        let sender = sender.clone();
+        tokio::spawn(async move {
+            if let Err(e) = sender.send(rest).await {
+                log::warn!("Failed sending LLM result, err: {:?}", &e);
+            }
+        });
+        // super::completion::send(&sender, rest)?;
     }
     let dt = start_gen.elapsed();
     log::info!(

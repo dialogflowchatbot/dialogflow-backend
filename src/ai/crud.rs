@@ -3,7 +3,7 @@ use std::convert::Infallible;
 use std::result::Result;
 
 use axum::body::Bytes;
-use axum::response::sse::{Event, Sse};
+use axum::response::sse::{Event, KeepAlive, Sse};
 // use crossbeam_channel::bounded;
 use futures::future::Either;
 use futures::stream::{self, Stream};
@@ -20,6 +20,14 @@ pub(crate) struct Request {
     pub(crate) prompt: String,
 }
 
+struct Guard;
+
+impl Drop for Guard {
+    fn drop(&mut self) {
+        println!("A SSE connection was dropped!")
+    }
+}
+
 async fn ttt(sender: tokio::sync::mpsc::Sender<String>) {
     for _ in 0..5 {
         let s = &sender;
@@ -30,6 +38,7 @@ async fn ttt(sender: tokio::sync::mpsc::Sender<String>) {
 
 pub(crate) async fn gen_text(bytes: Bytes) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     let q: Request = serde_json::from_slice(bytes.as_ref()).unwrap();
+    let _guard = Guard;
     /*
     let stream = if q.robot_id.is_empty() || q.prompt.is_empty() {
         Either::Left(stream::once(futures::future::ready(
@@ -52,7 +61,7 @@ pub(crate) async fn gen_text(bytes: Bytes) -> Sse<impl Stream<Item = Result<Even
         Either::Right(stream.map(|s| Ok::<Event, Infallible>(Event::default().data(s))))
     };
     Sse::new(stream).keep_alive(
-        axum::response::sse::KeepAlive::new()
+        KeepAlive::new()
             .interval(Duration::from_secs(30))
             .text("keep-alive-text"),
     )
@@ -65,12 +74,13 @@ pub(crate) async fn gen_text(bytes: Bytes) -> Sse<impl Stream<Item = Result<Even
     });
     tokio::spawn(async move {
         // ttt(sender).await;
-        if let Err(e) = completion::completion(&q.robot_id, &q.prompt, sender).await {
+        let borrowed_sender = &sender;
+        if let Err(e) = completion::completion(&q.robot_id, &q.prompt, borrowed_sender).await {
             log::error!("{:?}", &e);
         }
     });
     Sse::new(stream).keep_alive(
-        axum::response::sse::KeepAlive::new()
+        KeepAlive::new()
             .interval(Duration::from_secs(30))
             .text("keep-alive-text"),
     )

@@ -33,7 +33,11 @@ pub(crate) fn replace_model_cache(robot_id: &str, m: &HuggingFaceModel) -> Resul
     }
 }
 
-pub(crate) async fn completion(robot_id: &str, prompt: &str, sender: Sender<String>) -> Result<()> {
+pub(crate) async fn completion(
+    robot_id: &str,
+    prompt: &str,
+    sender: &Sender<String>,
+) -> Result<()> {
     if let Some(settings) = settings::get_settings(robot_id)? {
         match settings.text_generation_provider.provider {
             TextGenerationProvider::HuggingFace(m) => {
@@ -93,7 +97,7 @@ async fn huggingface(
     m: &HuggingFaceModel,
     prompt: &str,
     sample_len: usize,
-    sender: Sender<String>,
+    sender: &Sender<String>,
 ) -> Result<()> {
     let info = m.get_info();
     log::info!("model_type={:?}", &info.model_type);
@@ -121,7 +125,7 @@ async fn open_ai(
     s: &str,
     connect_timeout_millis: u16,
     read_timeout_millis: u16,
-    sender: Sender<String>,
+    sender: &Sender<String>,
 ) -> Result<()> {
     let client = reqwest::Client::builder()
         .connect_timeout(Duration::from_millis(connect_timeout_millis.into()))
@@ -174,7 +178,7 @@ async fn ollama(
     connect_timeout_millis: u16,
     read_timeout_millis: u16,
     sample_len: u32,
-    sender: Sender<String>,
+    sender: &Sender<String>,
 ) -> Result<()> {
     let client = reqwest::Client::builder()
         .connect_timeout(Duration::from_millis(connect_timeout_millis.into()))
