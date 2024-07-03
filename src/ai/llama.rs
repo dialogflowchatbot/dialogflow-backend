@@ -136,34 +136,15 @@ pub(super) fn gen_text(
             //     );
             //     break;
             // }
+            log::info!("{}", &t);
             if sender.is_closed() {
                 break;
             }
-            let sender = sender.clone();
-            tokio::spawn(async move {
-                if let Err(e) = sender.send(t).await {
-                    log::warn!("Failed sending LLM result, err: {:?}", &e);
-                }
-            });
-            // sender.try_send(t.clone());
-            // super::completion::send(&sender, String::from(t.trim()))?;
+            crate::sse_send!(sender, t);
         }
     }
     if let Some(rest) = tokenizer.decode_rest()? {
-        // log::info!("{}",&rest);
-        // if let Err(e) = sender.try_send(rest) {
-        //     log::warn!(
-        //         "Sent failed, maybe receiver dropped or queue was full, err: {:?}",
-        //         &e
-        //     );
-        // }
-        let sender = sender.clone();
-        tokio::spawn(async move {
-            if let Err(e) = sender.send(rest).await {
-                log::warn!("Failed sending LLM result, err: {:?}", &e);
-            }
-        });
-        // super::completion::send(&sender, rest)?;
+        crate::sse_send!(sender, rest);
     }
     let dt = start_gen.elapsed();
     log::info!(

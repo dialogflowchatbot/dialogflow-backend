@@ -20,25 +20,16 @@ pub(crate) struct Request {
     pub(crate) prompt: String,
 }
 
-struct Guard;
-
-impl Drop for Guard {
-    fn drop(&mut self) {
-        println!("A SSE connection was dropped!")
-    }
-}
-
-async fn ttt(sender: tokio::sync::mpsc::Sender<String>) {
-    for _ in 0..5 {
-        let s = &sender;
-        s.try_send(String::from("1"));
-        tokio::time::sleep(std::time::Duration::from_secs(30)).await;
-    }
-}
+// struct Guard;
+// impl Drop for Guard {
+//     fn drop(&mut self) {
+//         println!("A SSE connection was dropped!")
+//     }
+// }
 
 pub(crate) async fn gen_text(bytes: Bytes) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     let q: Request = serde_json::from_slice(bytes.as_ref()).unwrap();
-    let _guard = Guard;
+    // let _guard = Guard;
     /*
     let stream = if q.robot_id.is_empty() || q.prompt.is_empty() {
         Either::Left(stream::once(futures::future::ready(
@@ -73,7 +64,6 @@ pub(crate) async fn gen_text(bytes: Bytes) -> Sse<impl Stream<Item = Result<Even
         Ok::<Event, Infallible>(event)
     });
     tokio::spawn(async move {
-        // ttt(sender).await;
         let borrowed_sender = &sender;
         if let Err(e) = completion::completion(&q.robot_id, &q.prompt, borrowed_sender).await {
             log::error!("{:?}", &e);
@@ -84,11 +74,4 @@ pub(crate) async fn gen_text(bytes: Bytes) -> Sse<impl Stream<Item = Result<Even
             .interval(Duration::from_secs(30))
             .text("keep-alive-text"),
     )
-    // let stream = stream::repeat_with(|| Event::default().data("data"))
-    // .map(Ok).throttle(Duration::from_secs(1));
-    // Sse::new(stream).keep_alive(
-    //     axum::response::sse::KeepAlive::new()
-    //         .interval(std::time::Duration::from_secs(30))
-    //         .text("keep-alive-text"),
-    // )
 }

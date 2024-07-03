@@ -81,16 +81,39 @@ pub(crate) async fn completion(
     }
 }
 
-pub(in crate::ai) fn send(sender: &Sender<String>, message: String) -> Result<()> {
-    if let Err(e) = sender.try_send(message) {
-        match e {
-            tokio::sync::mpsc::error::TrySendError::Full(m) => Ok(sender.blocking_send(m)?),
-            tokio::sync::mpsc::error::TrySendError::Closed(_) => Err(e.into()),
+#[macro_export]
+macro_rules! sse_send (
+    ($sender: expr, $message: expr) => ({
+        println!("sse_send0");
+        if !$sender.is_closed() {
+            println!("sse_send1");
+            let sender = $sender.clone();
+            // tokio::spawn(async move {
+            //     log::info!("sse_send {}",&$message);
+            //     if let Err(e) = sender.send($message).await {
+            //         log::warn!("Failed sending LLM result, err: {:?}", &e);
+            //     }
+            // });
+            tokio::task::spawn_blocking(move || {
+                if let Err(e) = sender.blocking_send($message) {
+                    log::warn!("Failed sending LLM result, err: {:?}", &e);
+                }
+            });
         }
-    } else {
-        Ok(())
-    }
-}
+    });
+);
+
+// pub(in crate::ai) fn send(sender: &Sender<String>, message: String) -> Result<()> {
+//     let sender = sender.clone();
+//     if let Err(e) = sender.try_send(message) {
+//         match e {
+//             tokio::sync::mpsc::error::TrySendError::Full(m) => Ok(sender.blocking_send(m)?),
+//             tokio::sync::mpsc::error::TrySendError::Closed(_) => Err(e.into()),
+//         }
+//     } else {
+//         Ok(())
+//     }
+// }
 
 async fn huggingface(
     robot_id: &str,

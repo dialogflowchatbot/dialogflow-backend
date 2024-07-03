@@ -100,12 +100,12 @@ pub(super) fn gen_text(
         generated_tokens += 1;
         if next_token == eos_token {
             if let Some(t) = tokenizer.decode_rest()? {
-                super::completion::send(&sender, t)?;
+                crate::sse_send!(sender, t);
             }
             break;
         }
         if let Some(t) = tokenizer.next_token(next_token)? {
-            super::completion::send(&sender, t)?;
+            crate::sse_send!(sender, t);
             // std::io::stdout().flush()?;
         }
         pos += context_size;
