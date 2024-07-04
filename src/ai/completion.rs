@@ -8,7 +8,7 @@ use crate::ai::huggingface::{HuggingFaceModel, HuggingFaceModelType};
 use crate::man::settings;
 use crate::result::{Error, Result};
 
-pub(crate) const TEMPERATURE: f64 = 0.8;
+pub(crate) const TEMPERATURE: f64 = 0.7;
 pub(crate) const REPEAT_PENALTY: f32 = 1.1;
 pub(crate) const REPEAT_LAST_N: usize = 64;
 

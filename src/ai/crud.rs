@@ -30,7 +30,6 @@ pub(crate) struct Request {
 pub(crate) async fn gen_text(bytes: Bytes) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     let q: Request = serde_json::from_slice(bytes.as_ref()).unwrap();
     // let _guard = Guard;
-    /*
     let stream = if q.robot_id.is_empty() || q.prompt.is_empty() {
         Either::Left(stream::once(futures::future::ready(
             Ok::<Event, Infallible>(Event::default().data("Invalid robot_id or prompt")),
@@ -41,34 +40,19 @@ pub(crate) async fn gen_text(bytes: Bytes) -> Sse<impl Stream<Item = Result<Even
         //     Event::default().data("Invalid robot_id or prompt")
         // ))))
         let (sender, receiver) = mpsc::channel::<String>(5);
-        let stream = ReceiverStream::new(receiver);
-        // let robot_id=q.robot_id.clone();
-        // let prompt=q.prompt.clone();
+        let stream = ReceiverStream::new(receiver).map(|s| {
+            log::info!("Sse sending {s}");
+            let event = Event::default().data(s);
+            Ok::<Event, Infallible>(event)
+        });
         tokio::spawn(async move {
-            if let Err(e) = completion::completion(&q.robot_id, &q.prompt, sender).await {
+            let borrowed_sender = &sender;
+            if let Err(e) = completion::completion(&q.robot_id, &q.prompt, borrowed_sender).await {
                 log::error!("{:?}", &e);
             }
         });
-        Either::Right(stream.map(|s| Ok::<Event, Infallible>(Event::default().data(s))))
+        Either::Right(stream)
     };
-    Sse::new(stream).keep_alive(
-        KeepAlive::new()
-            .interval(Duration::from_secs(30))
-            .text("keep-alive-text"),
-    )
-    */
-    let (sender, receiver) = mpsc::channel::<String>(5);
-    let stream = ReceiverStream::new(receiver).map(|s| {
-        log::info!("Sse sending {s}");
-        let event = Event::default().data(s);
-        Ok::<Event, Infallible>(event)
-    });
-    tokio::spawn(async move {
-        let borrowed_sender = &sender;
-        if let Err(e) = completion::completion(&q.robot_id, &q.prompt, borrowed_sender).await {
-            log::error!("{:?}", &e);
-        }
-    });
     Sse::new(stream).keep_alive(
         KeepAlive::new()
             .interval(Duration::from_secs(30))
