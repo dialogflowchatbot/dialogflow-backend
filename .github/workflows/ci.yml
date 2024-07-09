@@ -32,12 +32,12 @@ jobs:
           #   bin: dialogflow
           #   name: dialogflow-FreeBSD-x86_64.tar.gz
           #   skip_tests: true
-          # - os_name: Linux-x86_64
-          #   os: ubuntu-20.04
-          #   target: x86_64-unknown-linux-musl
-          #   bin: dialogflow
-          #   name: dialogflow-Linux-x86_64-musl.tar.gz
-          #   skip_tests: true
+          - os_name: Linux-x86_64
+            os: ubuntu-20.04
+            target: x86_64-unknown-linux-musl
+            bin: dialogflow
+            name: dialogflow-Linux-x86_64-musl.tar.gz
+            skip_tests: true
           # - os_name: Linux-aarch64
           #   os: ubuntu-20.04
           #   target: aarch64-unknown-linux-musl
