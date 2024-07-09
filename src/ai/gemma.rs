@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::io::Write;
+// use std::io::Write;
 use std::sync::{Mutex, OnceLock};
 
 use candle::{DType, Tensor};
@@ -116,7 +116,7 @@ pub(super) fn gen_text(
             );
         }
     }
-    std::io::stdout().flush()?;
+    // std::io::stdout().flush()?;
     println!(
         "\n{generated_tokens} tokens generated ({:.2} token/s)",
         generated_tokens as f64 / dt.as_secs_f64(),

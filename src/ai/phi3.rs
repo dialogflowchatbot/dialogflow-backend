@@ -45,7 +45,7 @@ pub(super) fn gen_text(
     };
     let (model, tokenizer) = model.get(robot_id).unwrap();
 
-    log::info!("starting the inference loop");
+    // log::info!("starting the inference loop");
     let mut tokenizer = super::token_output_stream::TokenOutputStream::new(tokenizer.clone());
     let mut tokens = match tokenizer.tokenizer().encode(prompt, true) {
         Ok(t) => t.get_ids().to_vec(),
@@ -65,7 +65,7 @@ pub(super) fn gen_text(
             )))
         }
     };
-    log::info!("{prompt}");
+    // log::info!("{prompt}");
     // std::io::stdout().flush()?;
     let start_gen = std::time::Instant::now();
     let mut pos = 0;

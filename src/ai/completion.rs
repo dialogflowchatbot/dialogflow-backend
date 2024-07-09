@@ -84,9 +84,9 @@ pub(crate) async fn completion(
 #[macro_export]
 macro_rules! sse_send (
     ($sender: expr, $message: expr) => ({
-        println!("sse_send0");
+        // println!("sse_send0");
         if !$sender.is_closed() {
-            println!("sse_send1");
+            // println!("sse_send1");
             let sender = $sender.clone();
             // tokio::spawn(async move {
             //     log::info!("sse_send {}",&$message);
@@ -123,7 +123,7 @@ async fn huggingface(
     sender: &Sender<String>,
 ) -> Result<()> {
     let info = m.get_info();
-    log::info!("model_type={:?}", &info.model_type);
+    // log::info!("model_type={:?}", &info.model_type);
     let new_prompt = info.convert_prompt(prompt)?;
     match info.model_type {
         HuggingFaceModelType::Gemma => {

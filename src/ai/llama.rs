@@ -61,8 +61,8 @@ pub(super) fn gen_text(
     };
     // log::info!("tokens len={}",tokens.len());
     let mut tokenizer = super::token_output_stream::TokenOutputStream::new(tokenizer.clone());
-    log::info!("starting the inference loop");
-    log::info!("{prompt}");
+    // log::info!("starting the inference loop");
+    // log::info!("{prompt}");
     let mut logits_processor = {
         let sampling = if super::completion::TEMPERATURE <= 0. {
             Sampling::ArgMax
@@ -89,7 +89,7 @@ pub(super) fn gen_text(
         let mut rng = Rand::new();
         LogitsProcessor::from_sampling(rng.gen::<u64>(), sampling)
     };
-    log::info!("logits_processor finished");
+    // log::info!("logits_processor finished");
     let start_gen = std::time::Instant::now();
     let mut index_pos = 0;
     let mut token_generated = 0;
@@ -136,7 +136,7 @@ pub(super) fn gen_text(
             //     );
             //     break;
             // }
-            log::info!("{}", &t);
+            // log::info!("{}", &t);
             if sender.is_closed() {
                 break;
             }
