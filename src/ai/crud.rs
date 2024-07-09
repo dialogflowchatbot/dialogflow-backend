@@ -41,7 +41,7 @@ pub(crate) async fn gen_text(bytes: Bytes) -> Sse<impl Stream<Item = Result<Even
         // ))))
         let (sender, receiver) = mpsc::channel::<String>(5);
         let stream = ReceiverStream::new(receiver).map(|s| {
-            log::info!("Sse sending {s}");
+            // log::info!("Sse sending {s}");
             let event = Event::default().data(s);
             Ok::<Event, Infallible>(event)
         });
