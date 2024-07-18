@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 
-use candle::{DType, Device, IndexOp, Tensor};
+use candle::{DType, IndexOp, Tensor};
 use candle_transformers::generation::LogitsProcessor;
 use candle_transformers::models::phi3::Model;
 use frand::Rand;

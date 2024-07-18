@@ -1,5 +1,5 @@
 use core::time::Duration;
-use std::fs::{read, OpenOptions as StdOpenOptions};
+use std::fs::OpenOptions as StdOpenOptions;
 use std::io::Read;
 use std::path::Path;
 use std::sync::{Mutex, OnceLock};
@@ -12,7 +12,6 @@ use candle_transformers::models::gemma::{Config as GemmaConfig, Model as GemmaMo
 use candle_transformers::models::llama::{Cache as LlamaCache, Llama, LlamaConfig};
 use candle_transformers::models::phi3::{Config as Phi3Config, Model as Phi3};
 use futures_util::StreamExt;
-use regex::bytes;
 use reqwest::header::{HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
 use tokenizers::{AddedToken, PaddingParams, PaddingStrategy, Tokenizer, TruncationParams};
@@ -49,12 +48,6 @@ pub(crate) enum HuggingFaceModelType {
     Phi3,
 }
 
-#[derive(Deserialize, Serialize)]
-struct Prompt {
-    role: String,
-    content: String,
-}
-
 // enum LoadedHfModel {
 //     Bert(BertModel, Tokenizer),
 //     Phi3(Phi3),
@@ -72,10 +65,10 @@ pub(crate) struct HuggingFaceModelInfo {
 
 impl HuggingFaceModelInfo {
     pub(super) fn convert_prompt(&self, s: &str) -> Result<String> {
-        let mut prompt: Vec<Prompt> = serde_json::from_str(s)?;
+        let mut prompts: Vec<super::completion::Prompt> = serde_json::from_str(s)?;
         let mut system = String::new();
         let mut user = String::new();
-        for p in prompt.iter_mut() {
+        for p in prompts.iter_mut() {
             if p.role.eq("system") {
                 std::mem::swap(&mut system, &mut p.content);
             } else if p.role.eq("user") {
@@ -122,7 +115,7 @@ impl HuggingFaceModelInfo {
                 }
                 p.push_str("<|user|>\n");
                 p.push_str(&user);
-                p.push_str("<end>\n<|assistant|><end>");
+                p.push_str("<|end|>\n<|assistant|>");
                 Ok(p)
             }
         }
@@ -557,7 +550,7 @@ pub(super) fn device() -> Result<Device> {
 //     tokenizers::DecoderWrapper,
 // >;
 
-pub(crate) fn check_model_files(info: &HuggingFaceModelInfo) -> Result<bool> {
+pub(crate) fn check_model_files(info: &HuggingFaceModelInfo) -> Result<()> {
     // let f = construct_model_file_path(repo, "config.json");
     // let config = std::fs::read(&f)?;
     // let config: serde_json::Value = serde_json::from_slice(&config)?;
@@ -578,11 +571,17 @@ pub(crate) fn check_model_files(info: &HuggingFaceModelInfo) -> Result<bool> {
     for f in files.iter() {
         let p = Path::new(f);
         if !p.exists() {
-            return Ok(false);
+            return Err(Error::ErrorWithMessage(format!(
+                "Path {:?} is not exist.",
+                p
+            )));
         }
         let ext = p.extension();
         if ext.is_none() {
-            return Ok(false);
+            return Err(Error::ErrorWithMessage(format!(
+                "{:?} doesn't have extension.",
+                p
+            )));
         }
         let ext = ext.unwrap();
         if ext.eq("json") {
@@ -601,11 +600,14 @@ pub(crate) fn check_model_files(info: &HuggingFaceModelInfo) -> Result<bool> {
         } else if ext.eq("safetensors") {
             let metadata = std::fs::metadata(&p)?;
             if metadata.len() < 62914560u64 {
-                return Ok(false);
+                return Err(Error::ErrorWithMessage(format!(
+                    "{:?} file size is too small.",
+                    p
+                )));
             }
         }
     }
-    Ok(true)
+    Ok(())
     // match info.model_type {
     //     HuggingFaceModelType::Bert => load_bert_model_files(&info.repository)
     //         .map(|_| true)

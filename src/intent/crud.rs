@@ -370,6 +370,7 @@ pub(crate) async fn add_phrase(
     if r.is_err() {
         return to_res(r.map(|_| ()));
     }
+    println!("1");
     let r = r.unwrap();
     if r.is_none() {
         return to_res(Err(Error::ErrorWithMessage(String::from(
@@ -381,6 +382,7 @@ pub(crate) async fn add_phrase(
     if r.is_err() {
         return to_res(r.map(|_| ()));
     }
+    println!("2");
     d.phrases.push(IntentPhraseData {
         id: r.unwrap(),
         phrase: String::from(params.data.as_str()),

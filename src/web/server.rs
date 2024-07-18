@@ -215,8 +215,12 @@ fn gen_router() -> Router {
             get(settings::download_model_progress),
         )
         .route(
-            "/management/settings/model/check",
+            "/management/settings/model/check/files",
             post(settings::check_model_files),
+        )
+        .route(
+            "/management/settings/model/check/embedding",
+            get(settings::check_embedding_model),
         )
         .route("/management/settings/smtp/test", post(settings::smtp_test))
         .route("/flow/answer", post(rt::answer))

@@ -1,7 +1,7 @@
 [
 (include_bytes!(r#"..\resources\assets/assets\inbound-bot-PJJg_rST.png.gz"#), ""),
-(include_bytes!(r#"..\resources\assets/assets\index-CUgNKZiF.css.gz"#), "text/css"),
-(include_bytes!(r#"..\resources\assets/assets\index-KJIk7eTs.js.gz"#), "text/javascript"),
+(include_bytes!(r#"..\resources\assets/assets\index-CFMBpwmb.css.gz"#), "text/css"),
+(include_bytes!(r#"..\resources\assets/assets\index-CGwDfCl8.js.gz"#), "text/javascript"),
 (include_bytes!(r#"..\resources\assets/assets\outbound-bot-EmsLuWRN.png.gz"#), ""),
 (include_bytes!(r#"..\resources\assets/assets\text-bot-CWb_Poym.png.gz"#), ""),
 (include_bytes!(r#"..\resources\assets/favicon.ico.gz"#), "image/x-icon"),

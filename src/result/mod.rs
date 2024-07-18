@@ -170,3 +170,9 @@ impl<T> From<std::sync::PoisonError<T>> for Error {
         Error::ErrorWithMessage(format!("{:?}", err))
     }
 }
+
+impl From<std::num::ParseFloatError> for Error {
+    fn from(err: std::num::ParseFloatError) -> Self {
+        Error::ErrorWithMessage(format!("{:?}", err))
+    }
+}

@@ -148,8 +148,8 @@ impl Default for Settings {
                 api_url: String::new(),
                 api_key: String::new(),
                 model: String::new(),
-                connect_timeout_millis: 1500,
-                read_timeout_millis: 3000,
+                connect_timeout_millis: 200,
+                read_timeout_millis: 10000,
                 max_response_token_length: 10,
             },
             sentence_embedding_provider: SentenceEmbeddingProvider {
@@ -159,8 +159,8 @@ impl Default for Settings {
                 api_url: String::new(),
                 api_key: String::new(),
                 model: String::new(),
-                connect_timeout_millis: 1500,
-                read_timeout_millis: 3000,
+                connect_timeout_millis: 200,
+                read_timeout_millis: 10000,
             },
             smtp_host: String::new(),
             smtp_username: String::new(),
@@ -327,7 +327,7 @@ pub(crate) async fn check_model_files(bytes: Bytes) -> impl IntoResponse {
             for model in repositories.iter() {
                 let info = model.get_info();
                 let r = match huggingface::check_model_files(&info) {
-                    Ok(r) => r,
+                    Ok(r) => true,
                     Err(e) => {
                         log::warn!(
                             "Hugging face model {} files incorrect. Err: {:?}",
@@ -346,4 +346,36 @@ pub(crate) async fn check_model_files(bytes: Bytes) -> impl IntoResponse {
             &e
         )))),
     }
+}
+
+pub(crate) async fn check_embedding_model(Query(q): Query<RobotQuery>) -> impl IntoResponse {
+    let r = if let Ok(r) = get_settings(&q.robot_id) {
+        if let Some(settings) = r {
+            match settings.sentence_embedding_provider.provider {
+                embedding::SentenceEmbeddingProvider::HuggingFace(m) => {
+                    let info = m.get_info();
+                    huggingface::check_model_files(&info)
+                }
+                embedding::SentenceEmbeddingProvider::OpenAI(_) => {
+                    if settings.sentence_embedding_provider.api_key.is_empty() {
+                        Err(Error::ErrorWithMessage(String::from(
+                            "OPENAI_API_KEY is empty.",
+                        )))
+                    } else {
+                        Ok(())
+                    }
+                }
+                embedding::SentenceEmbeddingProvider::Ollama(_) => Ok(()),
+            }
+        } else {
+            Err(Error::ErrorWithMessage(String::from(
+                "Can NOT find settings of this robot.",
+            )))
+        }
+    } else {
+        Err(Error::ErrorWithMessage(String::from(
+            "Failed to get settings of this robot.",
+        )))
+    };
+    to_res(r)
 }

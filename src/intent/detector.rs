@@ -61,7 +61,9 @@ pub(crate) async fn detect(robot_id: &str, s: &str) -> Result<Option<String>> {
                 search_vector = Some(embedding(robot_id, s).await?.into());
             }
             if search_vector.is_some() {
+                println!("1");
                 let results = collection.search(search_vector.as_ref().unwrap(), 5)?;
+                println!("{}", results.len());
                 for r in results.iter() {
                     log::info!("r.distance={}", r.distance);
                     if r.distance >= 0.9 {
@@ -105,11 +107,14 @@ pub(crate) async fn save_intent_embedding(
         }
     };
     // log::info!("{:#?}", &embedding);
+    // let records = Record::many_random(128, 5);
+    // log::info!("Gened {}", records.get(0).unwrap().vector.0.get(0).unwrap());
     let vector: Vector = embedding.into();
     let record: Record = Record::new(&vector, &"".into());
     let r = collection.insert(&record)?;
     // let collection = Collection::build(&config, &records)?;
     db.save_collection(intent_id, &collection)?;
+    db.flush()?;
     Ok(r.to_usize())
 }
 

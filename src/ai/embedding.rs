@@ -7,6 +7,7 @@ use std::vec::Vec;
 
 use candle::{IndexOp, Tensor};
 use candle_transformers::models::bert::BertModel;
+use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use tokenizers::Tokenizer;
@@ -31,6 +32,7 @@ pub(crate) async fn embedding(robot_id: &str, s: &str) -> Result<Vec<f32>> {
                 open_ai(
                     &m,
                     s,
+                    &settings.sentence_embedding_provider.api_key,
                     settings.sentence_embedding_provider.connect_timeout_millis,
                     settings.sentence_embedding_provider.read_timeout_millis,
                 )
@@ -109,6 +111,7 @@ fn hugging_face(robot_id: &str, info: &HuggingFaceModelInfo, s: &str) -> Result<
 async fn open_ai(
     m: &str,
     s: &str,
+    api_key: &str,
     connect_timeout_millis: u16,
     read_timeout_millis: u16,
 ) -> Result<Vec<f32>> {
@@ -120,10 +123,11 @@ async fn open_ai(
     map.insert(String::from("input"), Value::String(String::from(s)));
     map.insert(String::from("model"), Value::String(String::from(m)));
     let obj = Value::Object(map);
+    let authorization = format!("Bearer {}", api_key);
     let req = client
         .post("https://api.openai.com/v1/embeddings")
         .header("Content-Type", "application/json")
-        .header("Authorization", "Bearer ")
+        .header("Authorization", &authorization)
         .body(serde_json::to_string(&obj)?);
     let r = req
         // .timeout(Duration::from_millis(60000))
@@ -139,7 +143,8 @@ async fn open_ai(
                 for e in embedding.iter() {
                     if let Some(n) = e.as_number() {
                         if let Some(num) = n.as_f64() {
-                            embedding_result.push(num as f32);
+                            let s = format!("{:.9}", num);
+                            embedding_result.push(s.parse::<f32>()?);
                         }
                     }
                 }
@@ -159,28 +164,43 @@ async fn ollama(
     let client = reqwest::Client::builder()
         .connect_timeout(Duration::from_millis(connect_timeout_millis.into()))
         .read_timeout(Duration::from_millis(read_timeout_millis.into()))
+        .no_proxy()
+        .connection_verbose(false)
         .build()?;
     let mut map = Map::new();
     map.insert(String::from("prompt"), Value::String(String::from(s)));
     map.insert(String::from("model"), Value::String(String::from(m)));
     let obj = Value::Object(map);
-    let req = client.post(u).body(serde_json::to_string(&obj)?);
-    let r = req
-        // .timeout(Duration::from_millis(60000))
-        .send()
-        .await?
-        .text()
-        .await?;
+    let body = serde_json::to_string(&obj)?;
+    log::info!("Url {} Body {}", &u, &body);
+    let req = client
+        .post(u)
+        .header("Content-Type", "application/json")
+        .body(body);
+    let r = req.send().await?.text().await?;
+    if r.len() < 10 {
+        // log::info!("Response {}",&r);
+        return Err(Error::ErrorWithMessage(String::from(
+            "Invalid Ollama response.",
+        )));
+    }
+    // log::info!("Ollama embedding result {}", &r[0..50]);
     let v: Value = serde_json::from_str(&r)?;
     let mut embedding_result: Vec<f32> = Vec::with_capacity(3072);
     if let Some(embedding) = v["embedding"].as_array() {
         for e in embedding.iter() {
             if let Some(n) = e.as_number() {
                 if let Some(num) = n.as_f64() {
-                    embedding_result.push(num as f32);
+                    let s = format!("{:.9}", num);
+                    embedding_result.push(s.parse::<f32>()?);
                 }
             }
         }
     }
+    log::info!(
+        "Ollama embedding result {:?} {:?}",
+        embedding_result.get(0),
+        embedding_result.get(1)
+    );
     Ok(embedding_result)
 }

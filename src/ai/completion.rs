@@ -1,5 +1,7 @@
 use core::time::Duration;
+
 // use crossbeam_channel::Sender;
+use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use tokio::sync::mpsc::Sender;
@@ -12,12 +14,18 @@ pub(crate) const TEMPERATURE: f64 = 0.7;
 pub(crate) const REPEAT_PENALTY: f32 = 1.1;
 pub(crate) const REPEAT_LAST_N: usize = 64;
 
-#[derive(Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(tag = "id", content = "model")]
 pub(crate) enum TextGenerationProvider {
     HuggingFace(HuggingFaceModel),
     OpenAI(String),
     Ollama(String),
+}
+
+#[derive(Deserialize, Serialize)]
+pub(in crate::ai) struct Prompt {
+    pub(in crate::ai) role: String,
+    pub(in crate::ai) content: String,
 }
 
 pub(crate) fn replace_model_cache(robot_id: &str, m: &HuggingFaceModel) -> Result<()> {
@@ -39,6 +47,7 @@ pub(crate) async fn completion(
     sender: &Sender<String>,
 ) -> Result<()> {
     if let Some(settings) = settings::get_settings(robot_id)? {
+        log::info!("{:?}", &settings.text_generation_provider.provider);
         match settings.text_generation_provider.provider {
             TextGenerationProvider::HuggingFace(m) => {
                 huggingface(
@@ -59,7 +68,8 @@ pub(crate) async fn completion(
                     settings.text_generation_provider.read_timeout_millis,
                     sender,
                 )
-                .await
+                .await?;
+                Ok(())
             }
             TextGenerationProvider::Ollama(m) => {
                 ollama(
@@ -71,7 +81,8 @@ pub(crate) async fn completion(
                     settings.text_generation_provider.max_response_token_length,
                     sender,
                 )
-                .await
+                .await?;
+                Ok(())
             }
         }
     } else {
@@ -127,13 +138,19 @@ async fn huggingface(
     let new_prompt = info.convert_prompt(prompt)?;
     match info.model_type {
         HuggingFaceModelType::Gemma => {
-            super::gemma::gen_text(robot_id, &info, prompt, sample_len, None, sender)
+            super::gemma::gen_text(robot_id, &info, prompt, sample_len, Some(0.5), sender)
         }
-        HuggingFaceModelType::Llama => {
-            super::llama::gen_text(robot_id, &info, &new_prompt, sample_len, None, None, sender)
-        }
+        HuggingFaceModelType::Llama => super::llama::gen_text(
+            robot_id,
+            &info,
+            &new_prompt,
+            sample_len,
+            Some(25),
+            Some(0.5),
+            sender,
+        ),
         HuggingFaceModelType::Phi3 => {
-            super::phi3::gen_text(robot_id, &info, prompt, sample_len, None, sender)
+            super::phi3::gen_text(robot_id, &info, prompt, sample_len, Some(0.5), sender)
         }
         HuggingFaceModelType::Bert => Err(Error::ErrorWithMessage(format!(
             "Unsuported model type {:?}.",
@@ -203,31 +220,47 @@ async fn ollama(
     sample_len: u32,
     sender: &Sender<String>,
 ) -> Result<()> {
+    let prompts: Vec<Prompt> = serde_json::from_str(s)?;
+    let mut prompt = String::with_capacity(32);
+    for p in prompts.iter() {
+        if p.role.eq("user") {
+            prompt.push_str(&p.content);
+            break;
+        }
+    }
+    if prompt.is_empty() {
+        return Ok(());
+    }
     let client = reqwest::Client::builder()
         .connect_timeout(Duration::from_millis(connect_timeout_millis.into()))
         .read_timeout(Duration::from_millis(read_timeout_millis.into()))
         .build()?;
     let mut map = Map::new();
-    map.insert(String::from("prompt"), Value::String(String::from(s)));
+    map.insert(String::from("prompt"), Value::String(prompt));
     map.insert(String::from("model"), Value::String(String::from(m)));
+    map.insert(String::from("stream"), Value::Bool(true));
 
     let mut num_predict = Map::new();
     num_predict.insert(String::from("num_predict"), Value::from(sample_len));
 
     map.insert(String::from("options"), Value::from(num_predict));
     let obj = Value::Object(map);
-    let req = client.post(u).body(serde_json::to_string(&obj)?);
-    let b = req
-        // .timeout(Duration::from_millis(60000))
-        .send()
-        .await?
-        .bytes()
-        .await?;
-    let v: Value = serde_json::from_slice(b.as_ref())?;
-    let s = if let Some(r) = v.get("response") {
-        r.as_str().unwrap_or("")
-    } else {
-        ""
-    };
+    let body = serde_json::to_string(&obj)?;
+    log::info!("Request Ollama body {}", &body);
+    let req = client.post(u).body(body);
+    let mut stream = req.send().await?.bytes_stream();
+    while let Some(item) = stream.next().await {
+        let chunk = item?;
+        let v: Value = serde_json::from_slice(chunk.as_ref())?;
+        if let Some(res) = v.get("response") {
+            if res.is_string() {
+                if let Some(s) = res.as_str() {
+                    let m = String::from(s);
+                    log::info!("Ollama push {}", &m);
+                    sse_send!(sender, m);
+                }
+            }
+        }
+    }
     Ok(())
 }
