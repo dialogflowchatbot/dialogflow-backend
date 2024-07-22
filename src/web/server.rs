@@ -172,6 +172,10 @@ fn gen_router() -> Router {
             post(intent::add_phrase).delete(intent::remove_phrase),
         )
         .route(
+            "/intent/phrase/regenerate-all",
+            get(intent::regenerate_embeddings),
+        )
+        .route(
             "/variable",
             get(variable::list)
                 .post(variable::add)

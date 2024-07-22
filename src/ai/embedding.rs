@@ -7,7 +7,6 @@ use std::vec::Vec;
 
 use candle::{IndexOp, Tensor};
 use candle_transformers::models::bert::BertModel;
-use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use tokenizers::Tokenizer;
@@ -88,7 +87,7 @@ fn hugging_face(robot_id: &str, info: &HuggingFaceModelInfo, s: &str) -> Result<
     let outputs = m.forward(&token_ids, &token_type_ids)?;
     let (_n_sentence, n_tokens, _hidden_size) = outputs.dims3()?;
     let embeddings = (outputs.sum(1)? / (n_tokens as f64))?;
-    // let embeddings = embeddings.broadcast_div(&embeddings.sqr()?.sum_keepdim(1)?.sqrt()?)?;
+    let embeddings = embeddings.broadcast_div(&embeddings.sqr()?.sum_keepdim(1)?.sqrt()?)?;
     let r = embeddings.i(0)?.to_vec1::<f32>()?;
     Ok(r)
 }

@@ -370,7 +370,6 @@ pub(crate) async fn add_phrase(
     if r.is_err() {
         return to_res(r.map(|_| ()));
     }
-    println!("1");
     let r = r.unwrap();
     if r.is_none() {
         return to_res(Err(Error::ErrorWithMessage(String::from(
@@ -382,7 +381,6 @@ pub(crate) async fn add_phrase(
     if r.is_err() {
         return to_res(r.map(|_| ()));
     }
-    println!("2");
     d.phrases.push(IntentPhraseData {
         id: r.unwrap(),
         phrase: String::from(params.data.as_str()),
@@ -436,4 +434,25 @@ pub(crate) async fn remove_phrase(Json(params): Json<IntentFormData>) -> impl In
 
 pub(crate) async fn detect(Json(params): Json<IntentFormData>) -> impl IntoResponse {
     to_res(detector::detect(&params.robot_id, &params.data).await)
+}
+
+pub(crate) async fn regenerate_embeddings(
+    Query(params): Query<IntentFormData>,
+) -> impl IntoResponse {
+    let key = params.id.as_str();
+    let r: Result<Option<IntentDetail>> =
+        db_executor!(db::query, &params.robot_id, TABLE_SUFFIX, key);
+    if r.is_err() {
+        return to_res(r.map(|_| ()));
+    }
+    let r = r.unwrap();
+    if r.is_none() {
+        return to_res(Err(Error::ErrorWithMessage(String::from(
+            "Can NOT find intention detail",
+        ))));
+    }
+    let d = r.unwrap();
+    let array: Vec<&str> = d.phrases.iter().map(|v| v.phrase.as_ref()).collect();
+    let r = detector::save_intent_embeddings(&params.robot_id, &params.data, array).await;
+    to_res(r)
 }

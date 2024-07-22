@@ -811,6 +811,7 @@ pub(crate) fn load_llama_model_files(
     info: &HuggingFaceModelInfo,
     device: &Device,
 ) -> Result<(Llama, LlamaCache, Tokenizer, Option<u32>)> {
+    log::info!("load_llama_model_files start");
     let tokenizer = init_tokenizer(&info.repository)?;
 
     let config_filename = construct_model_file_path(&info.repository, "config.json");
@@ -823,7 +824,9 @@ pub(crate) fn load_llama_model_files(
     let dtype = DType::F16;
     let cache = LlamaCache::new(true, dtype, &config, device)?;
     let vb = unsafe { VarBuilder::from_mmaped_safetensors(&filenames, dtype, device)? };
-    Ok((Llama::load(vb, &config)?, cache, tokenizer, eos_token_id))
+    let m = Llama::load(vb, &config)?;
+    log::info!("load_llama_model_files end");
+    Ok((m, cache, tokenizer, eos_token_id))
 }
 
 pub(crate) fn load_gemma_model_files(
@@ -843,4 +846,10 @@ pub(crate) fn load_gemma_model_files(
     let vb = unsafe { VarBuilder::from_mmaped_safetensors(&filenames, dtype, device)? };
     let model = GemmaModel::new(device.is_cuda(), &config, vb)?;
     Ok((model, tokenizer))
+}
+
+pub(crate) fn load_pytorch_mode_files(info: &HuggingFaceModelInfo, device: &Device) -> Result<()> {
+    let weights_filename = construct_model_file_path(&info.repository, "pytorch_model.bin");
+    let vb = VarBuilder::from_pth(&weights_filename, DType::BF16, device)?;
+    Ok(())
 }

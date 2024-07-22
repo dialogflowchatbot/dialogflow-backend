@@ -61,12 +61,11 @@ pub(crate) async fn detect(robot_id: &str, s: &str) -> Result<Option<String>> {
                 search_vector = Some(embedding(robot_id, s).await?.into());
             }
             if search_vector.is_some() {
-                println!("1");
                 let results = collection.search(search_vector.as_ref().unwrap(), 5)?;
                 println!("{}", results.len());
                 for r in results.iter() {
                     log::info!("r.distance={}", r.distance);
-                    if r.distance >= 0.9 {
+                    if r.distance <= 0.15 {
                         return Ok(Some(i.name.clone()));
                     }
                 }
@@ -100,7 +99,9 @@ pub(crate) async fn save_intent_embedding(
             if is_col_not_found_err(&e) {
                 let mut config = Config::default();
                 config.distance = Distance::Cosine;
-                Collection::new(&config)
+                let mut collection = Collection::new(&config);
+                collection.set_dimension(embedding.len())?;
+                collection
             } else {
                 return Err(e.into());
             }
@@ -116,6 +117,41 @@ pub(crate) async fn save_intent_embedding(
     db.save_collection(intent_id, &collection)?;
     db.flush()?;
     Ok(r.to_usize())
+}
+
+pub(crate) async fn save_intent_embeddings(
+    robot_id: &str,
+    intent_id: &str,
+    array: Vec<&str>,
+) -> Result<()> {
+    delete_all_embeddings(robot_id, intent_id)?;
+    let mut embeddings: Vec<Vec<f32>> = Vec::with_capacity(array.len());
+    for &s in array.iter() {
+        let embedding = embedding(robot_id, s).await?;
+        if embedding.is_empty() {
+            let err = format!("{s} embedding data is empty");
+            log::warn!("{}", &err);
+        } else {
+            embeddings.push(embedding);
+        }
+    }
+    if embeddings.is_empty() {
+        return Err(Error::ErrorWithMessage(String::from(
+            "No embeddings were generated.",
+        )));
+    }
+    let mut db = Database::open(&format!("{}{}", SAVING_PATH_ROOT, robot_id))?;
+    // log::info!("{:#?}", &embedding);
+    // let records = Record::many_random(128, 5);
+    // log::info!("Gened {}", records.get(0).unwrap().vector.0.get(0).unwrap());
+    let vectors: Vec<Vector> = embeddings.iter().map(|d| d.into()).collect();
+    let records: Vec<Record> = vectors.iter().map(|v| Record::new(v, &"".into())).collect();
+    let mut config = Config::default();
+    config.distance = Distance::Cosine;
+    let collection = Collection::build(&config, &records).unwrap();
+    db.save_collection(intent_id, &collection)?;
+    db.flush()?;
+    Ok(())
 }
 
 pub(crate) fn delete_intent_embedding(robot_id: &str, intent_id: &str, id: usize) -> Result<()> {
