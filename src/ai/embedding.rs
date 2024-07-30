@@ -23,9 +23,9 @@ pub(crate) enum SentenceEmbeddingProvider {
     Ollama(String),
 }
 
-pub(crate) async fn embedding(robot_id: &str, s: &str) -> Result<Vec<f32>> {
+pub(crate) async fn embedding(robot_id: &str, s: &str) -> Result<(Vec<f32>, u8)> {
     if let Some(settings) = settings::get_settings(robot_id)? {
-        match settings.sentence_embedding_provider.provider {
+        let v = match settings.sentence_embedding_provider.provider {
             SentenceEmbeddingProvider::HuggingFace(m) => hugging_face(robot_id, &m.get_info(), s),
             SentenceEmbeddingProvider::OpenAI(m) => {
                 open_ai(
@@ -47,9 +47,13 @@ pub(crate) async fn embedding(robot_id: &str, s: &str) -> Result<Vec<f32>> {
                 )
                 .await
             }
-        }
+        }?;
+        Ok((v, settings.sentence_embedding_provider.similarity_threshold))
     } else {
-        Ok(vec![])
+        Err(Error::ErrorWithMessage(format!(
+            "Can not find settings of {}",
+            robot_id
+        )))
     }
 }
 
@@ -184,14 +188,16 @@ async fn ollama(
         )));
     }
     // log::info!("Ollama embedding result {}", &r[0..50]);
+    log::info!("Ollama embedding result {}", &r);
     let v: Value = serde_json::from_str(&r)?;
     let mut embedding_result: Vec<f32> = Vec::with_capacity(3072);
     if let Some(embedding) = v["embedding"].as_array() {
         for e in embedding.iter() {
             if let Some(n) = e.as_number() {
                 if let Some(num) = n.as_f64() {
-                    let s = format!("{:.9}", num);
-                    embedding_result.push(s.parse::<f32>()?);
+                    // let s = format!("{:.9}", num);
+                    // embedding_result.push(s.parse::<f32>()?);
+                    embedding_result.push(num as f32);
                 }
             }
         }

@@ -1,10 +1,9 @@
-use std::sync::Mutex;
+use std::sync::{LazyLock, Mutex};
 
 use axum::extract::Query;
 use axum::http::{header::HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
-use once_cell::sync::Lazy;
 // use redb::TableDefinition;
 
 use super::dto::{SubFlowDetail, SubFlowFormData};
@@ -17,7 +16,7 @@ use crate::web::server::{self, to_res};
 pub(crate) const TABLE_SUFFIX: &str = "subflows";
 // pub(crate) const TABLE: TableDefinition<&str, &[u8]> = TableDefinition::new("subflows");
 // pub(crate) const SUB_FLOW_LIST_KEY: &str = "subflows";
-static LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
+static LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
 // pub(crate) fn init(is_en: bool, mainflow_id: &str) -> Result<()> {
 //     let flow = vec![SubFlowDetail::new(if is_en {

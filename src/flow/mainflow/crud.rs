@@ -1,9 +1,8 @@
 use std::collections::HashMap;
-use std::sync::OnceLock;
+use std::sync::{LazyLock, OnceLock};
 
 use axum::extract::Query;
 use axum::{response::IntoResponse, Json};
-use once_cell::sync::Lazy;
 // use redb::TableDefinition;
 use std::sync::Mutex;
 
@@ -17,7 +16,7 @@ use crate::web::server::to_res;
 // const TABLE: TableDefinition<&str, &[u8]> = TableDefinition::new("mainflows");
 pub(crate) const TABLE_SUFFIX: &str = "mainflows";
 
-static LOCK: Lazy<Mutex<bool>> = Lazy::new(|| Mutex::new(false));
+static LOCK: LazyLock<Mutex<bool>> = LazyLock::new(|| Mutex::new(false));
 static DEFAULT_NAMES: OnceLock<(String, String)> = OnceLock::new();
 
 pub(crate) fn init_default_names(is_en: bool) -> Result<()> {

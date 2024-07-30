@@ -1,7 +1,10 @@
-use serde::{Deserialize, Serialize};
-use {once_cell::sync::Lazy, regex::Regex};
+use std::sync::LazyLock;
 
-static NUMBER_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"[1-9]([\d]+)?(.[\d]+)?").unwrap());
+use regex::Regex;
+use serde::{Deserialize, Serialize};
+
+static NUMBER_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"[1-9]([\d]+)?(.[\d]+)?").unwrap());
 
 #[derive(Clone, Deserialize, Serialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[archive(compare(PartialEq), check_bytes)]

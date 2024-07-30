@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 
-pub(crate) static ASSETS_MAP: Lazy<HashMap<&str, usize>> = Lazy::new(|| {
+pub(crate) static ASSETS_MAP: LazyLock<HashMap<&str, usize>> = LazyLock::new(|| {
     HashMap::from([
         (r"/assets/inbound-bot-PJJg_rST.png", 0),
         (r"/assets/index-CFMBpwmb.css", 1),

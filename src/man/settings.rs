@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::default::Default;
 use std::net::SocketAddr;
 
@@ -111,6 +110,8 @@ pub(crate) struct TextGenerationProvider {
 #[derive(Deserialize, Serialize)]
 pub(crate) struct SentenceEmbeddingProvider {
     pub(crate) provider: embedding::SentenceEmbeddingProvider,
+    #[serde(rename = "similarityThreshold")]
+    pub(crate) similarity_threshold: u8,
     #[serde(rename = "apiUrl")]
     pub(crate) api_url: String,
     #[serde(rename = "apiKey")]
@@ -156,6 +157,7 @@ impl Default for Settings {
                 provider: embedding::SentenceEmbeddingProvider::HuggingFace(
                     huggingface::HuggingFaceModel::AllMiniLML6V2,
                 ),
+                similarity_threshold: 85u8,
                 api_url: String::new(),
                 api_key: String::new(),
                 model: String::new(),
@@ -327,7 +329,7 @@ pub(crate) async fn check_model_files(bytes: Bytes) -> impl IntoResponse {
             for model in repositories.iter() {
                 let info = model.get_info();
                 let r = match huggingface::check_model_files(&info) {
-                    Ok(r) => true,
+                    Ok(_) => true,
                     Err(e) => {
                         log::warn!(
                             "Hugging face model {} files incorrect. Err: {:?}",

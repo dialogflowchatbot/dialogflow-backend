@@ -110,12 +110,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         r##"use std::collections::HashMap;"##,
     )?;
     writeln!(&mut service_asset_file, r##""##,)?;
-    writeln!(&mut service_asset_file, r##"use once_cell::sync::Lazy;"##,)?;
+    writeln!(&mut service_asset_file, r##"use std::sync::LazyLock;"##,)?;
     writeln!(&mut service_asset_file, r##""##,)?;
     // use std::cell::LazyCell;
     writeln!(
         &mut service_asset_file,
-        r##"pub(crate) static ASSETS_MAP: Lazy<HashMap<&str, usize>> = Lazy::new(|| {{"##,
+        r##"pub(crate) static ASSETS_MAP: LazyLock<HashMap<&str, usize>> = LazyLock::new(|| {{"##,
     )?;
     writeln!(&mut service_asset_file, r##"HashMap::from(["##,)?;
     let mut i = 0u8;

@@ -1,7 +1,7 @@
 use std::borrow::{Borrow, Cow};
+use std::sync::LazyLock;
 use std::vec::Vec;
 
-use once_cell::sync::Lazy;
 use redb::ReadableTableMetadata;
 use redb::{Database, ReadableTable, TableDefinition};
 
@@ -25,7 +25,7 @@ macro_rules! db_executor (
     });
 );
 
-pub(crate) static DB: Lazy<Database> = Lazy::new(|| {
+pub(crate) static DB: LazyLock<Database> = LazyLock::new(|| {
     let data_folder = std::path::Path::new("./data");
     if !data_folder.exists() {
         std::fs::create_dir(data_folder).expect("Create data directory failed.");

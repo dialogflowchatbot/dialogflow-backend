@@ -1,4 +1,5 @@
 // use std::net::SocketAddr;
+use std::sync::LazyLock;
 use std::vec::Vec;
 
 use axum::http::{header, HeaderMap, HeaderValue, Method, StatusCode, Uri};
@@ -6,7 +7,6 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::Router;
 use colored::Colorize;
-use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use tower_http::cors::{AllowOrigin, CorsLayer};
 
@@ -24,11 +24,11 @@ use crate::variable::crud as variable;
 
 //https://stackoverflow.com/questions/27840394/how-can-a-rust-program-access-metadata-from-its-cargo-package
 pub(crate) const VERSION: &str = env!("CARGO_PKG_VERSION");
-static VERSION_NUM: Lazy<u64> = Lazy::new(|| convert_version(VERSION));
+static VERSION_NUM: LazyLock<u64> = LazyLock::new(|| convert_version(VERSION));
 
 const ASSETS: &[(&[u8], &str)] = &include!("asset.txt");
 
-pub(crate) static IS_EN: Lazy<bool> = Lazy::new(|| {
+pub(crate) static IS_EN: LazyLock<bool> = LazyLock::new(|| {
     let language = get_lang();
     // println!("Your OS language is: {}", language);
     language[0..2].eq("en")

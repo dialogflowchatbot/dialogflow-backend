@@ -20,6 +20,7 @@ pub(crate) async fn detect(robot_id: &str, s: &str) -> Result<Option<String>> {
     // println!("inner intent detect {:?}", now.elapsed());
     if let Some(r) = op {
         let mut search_vector: Option<Vector> = None;
+        let mut similarity_threshold = 0u8;
         for i in r.iter() {
             let r: Option<IntentDetail> = db_executor!(
                 db::query,
@@ -58,14 +59,19 @@ pub(crate) async fn detect(robot_id: &str, s: &str) -> Result<Option<String>> {
                 }
             };
             if search_vector.is_none() {
-                search_vector = Some(embedding(robot_id, s).await?.into());
+                let embedding = embedding(robot_id, s).await?;
+                // let s = format!("{:?}", &embedding);
+                // let regex = regex::Regex::new(r"\s").unwrap();
+                // log::info!("detect embedding {}", regex.replace_all(&s, ""));
+                search_vector = Some(embedding.0.into());
+                similarity_threshold = embedding.1;
             }
             if search_vector.is_some() {
                 let results = collection.search(search_vector.as_ref().unwrap(), 5)?;
                 println!("{}", results.len());
                 for r in results.iter() {
                     log::info!("r.distance={}", r.distance);
-                    if r.distance <= 0.15 {
+                    if 100u8 - (r.distance * 100f32) as u8 >= similarity_threshold {
                         return Ok(Some(i.name.clone()));
                     }
                 }
@@ -87,11 +93,12 @@ pub(crate) async fn save_intent_embedding(
     s: &str,
 ) -> Result<usize> {
     let embedding = embedding(robot_id, s).await?;
-    if embedding.is_empty() {
+    if embedding.0.is_empty() {
         let err = format!("{s} embedding data is empty");
         log::warn!("{}", &err);
         return Err(Error::ErrorWithMessage(err));
     }
+    // log::info!("save embedding {:#?}", &embedding);
     let mut db = Database::open(&format!("{}{}", SAVING_PATH_ROOT, robot_id))?;
     let mut collection = match db.get_collection(intent_id) {
         Ok(c) => c,
@@ -100,17 +107,16 @@ pub(crate) async fn save_intent_embedding(
                 let mut config = Config::default();
                 config.distance = Distance::Cosine;
                 let mut collection = Collection::new(&config);
-                collection.set_dimension(embedding.len())?;
+                collection.set_dimension(embedding.0.len())?;
                 collection
             } else {
                 return Err(e.into());
             }
         }
     };
-    // log::info!("{:#?}", &embedding);
     // let records = Record::many_random(128, 5);
     // log::info!("Gened {}", records.get(0).unwrap().vector.0.get(0).unwrap());
-    let vector: Vector = embedding.into();
+    let vector: Vector = embedding.0.into();
     let record: Record = Record::new(&vector, &"".into());
     let r = collection.insert(&record)?;
     // let collection = Collection::build(&config, &records)?;
@@ -128,11 +134,11 @@ pub(crate) async fn save_intent_embeddings(
     let mut embeddings: Vec<Vec<f32>> = Vec::with_capacity(array.len());
     for &s in array.iter() {
         let embedding = embedding(robot_id, s).await?;
-        if embedding.is_empty() {
+        if embedding.0.is_empty() {
             let err = format!("{s} embedding data is empty");
             log::warn!("{}", &err);
         } else {
-            embeddings.push(embedding);
+            embeddings.push(embedding.0);
         }
     }
     if embeddings.is_empty() {
@@ -149,6 +155,7 @@ pub(crate) async fn save_intent_embeddings(
     let mut config = Config::default();
     config.distance = Distance::Cosine;
     let collection = Collection::build(&config, &records).unwrap();
+    log::info!("New collection demension is {}", collection.dimension());
     db.save_collection(intent_id, &collection)?;
     db.flush()?;
     Ok(())
