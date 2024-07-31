@@ -1,8 +1,4 @@
-use std::collections::HashMap;
-// use std::io::Write;
-use std::sync::{Mutex, OnceLock};
-
-use candle::Tensor;
+use candle::{Device, Tensor};
 use candle_transformers::generation::{LogitsProcessor, Sampling};
 use candle_transformers::models::llama::{Cache, Llama};
 // use crossbeam_channel::Sender;
@@ -10,44 +6,46 @@ use frand::Rand;
 use tokenizers::Tokenizer;
 use tokio::sync::mpsc::Sender;
 
-use super::huggingface::{device, load_llama_model_files, HuggingFaceModelInfo};
 use crate::result::{Error, Result};
 
-static TEXT_GENERATION_MODEL: OnceLock<
-    Mutex<HashMap<String, (Llama, Cache, Tokenizer, Option<u32>)>>,
-> = OnceLock::new();
+// static TEXT_GENERATION_MODEL: OnceLock<
+//     Mutex<HashMap<String, (Llama, Cache, Tokenizer, Option<u32>)>>,
+// > = OnceLock::new();
 
-pub(super) fn replace_model_cache(robot_id: &str, info: &HuggingFaceModelInfo) -> Result<()> {
-    let device = device()?;
-    let c = load_llama_model_files(info, &device)?;
-    if let Some(lock) = TEXT_GENERATION_MODEL.get() {
-        if let Ok(mut cache) = lock.lock() {
-            cache.insert(String::from(robot_id), c);
-        }
-    }
-    Ok(())
-}
+// pub(super) fn replace_model_cache(robot_id: &str, info: &HuggingFaceModelInfo) -> Result<()> {
+//     let device = device()?;
+//     let c = load_llama_model_files(info, &device)?;
+//     if let Some(lock) = TEXT_GENERATION_MODEL.get() {
+//         if let Ok(mut cache) = lock.lock() {
+//             cache.insert(String::from(robot_id), c);
+//         }
+//     }
+//     Ok(())
+// }
 
 pub(super) fn gen_text(
-    robot_id: &str,
-    info: &HuggingFaceModelInfo,
+    device: &Device,
+    model: &Llama,
+    cache: &Cache,
+    tokenizer: &Tokenizer,
+    eos_token_id: &Option<u32>,
     prompt: &str,
     sample_len: usize,
     top_k: Option<usize>,
     top_p: Option<f64>,
     sender: &Sender<String>,
 ) -> Result<()> {
-    let device = device()?;
-    let lock = TEXT_GENERATION_MODEL.get_or_init(|| Mutex::new(HashMap::with_capacity(32)));
-    let mut model = lock.lock().unwrap_or_else(|e| {
-        log::warn!("{:#?}", &e);
-        e.into_inner()
-    });
-    if !model.contains_key(robot_id) {
-        let r = load_llama_model_files(info, &device)?;
-        model.insert(String::from(robot_id), r);
-    };
-    let (model, ref mut cache, tokenizer, eos_token_id) = model.get_mut(robot_id).unwrap();
+    // let device = device()?;
+    // let lock = TEXT_GENERATION_MODEL.get_or_init(|| Mutex::new(HashMap::with_capacity(32)));
+    // let mut model = lock.lock().unwrap_or_else(|e| {
+    //     log::warn!("{:#?}", &e);
+    //     e.into_inner()
+    // });
+    // if !model.contains_key(robot_id) {
+    //     let r = load_llama_model_files(info, &device)?;
+    //     model.insert(String::from(robot_id), r);
+    // };
+    // let (model, ref cache, tokenizer, eos_token_id) = model.get(robot_id).unwrap();
 
     // let (model, mut cache, tokenizer, eos_token_id) = load_llama_model_files(info,&device)?;
     // let mut tokens = tokenizer
@@ -127,7 +125,7 @@ pub(super) fn gen_text(
             break;
         }
         if let Some(t) = tokenizer.next_token(next_token)? {
-            // print!("{&t}");
+            log::info!("{&t}");
             // std::io::stdout().flush()?;
             // if let Err(e) = sender.try_send(t) {
             //     log::warn!(

@@ -20,7 +20,7 @@ use tokio::io::AsyncWriteExt;
 
 use crate::result::{Error, Result};
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub(crate) enum HuggingFaceModel {
     AllMiniLML6V2,
     ParaphraseMLMiniLML12V2,
@@ -38,6 +38,34 @@ pub(crate) enum HuggingFaceModel {
     TinyLlama1_1bChatV1_0,
     Gemma2bInstruct,
     Gemma7bInstruct,
+}
+
+pub(crate) enum LoadedHuggingFaceModel {
+    Bert((BertModel, Tokenizer)),
+    Llama((Device, Llama, LlamaCache, Tokenizer, Option<u32>)),
+    Gemma((Device, GemmaModel, Tokenizer)),
+    Phi3((Device, Phi3, Tokenizer)),
+}
+
+impl LoadedHuggingFaceModel {
+    pub(super) fn load(m: &HuggingFaceModel) -> Result<LoadedHuggingFaceModel> {
+        let info = m.get_info();
+        let m = match info.model_type {
+            HuggingFaceModelType::Llama => {
+                LoadedHuggingFaceModel::Llama(load_llama_model_files(&info)?)
+            }
+            HuggingFaceModelType::Gemma => {
+                LoadedHuggingFaceModel::Gemma(load_gemma_model_files(&info)?)
+            }
+            HuggingFaceModelType::Phi3 => {
+                LoadedHuggingFaceModel::Phi3(load_phi3_model_files(&info)?)
+            }
+            HuggingFaceModelType::Bert => {
+                LoadedHuggingFaceModel::Bert(load_bert_model_files(&info.repository)?)
+            }
+        };
+        Ok(m)
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
@@ -775,8 +803,8 @@ fn load_safetensors(mirror: &str, json_file: &str) -> Result<Vec<String>> {
 
 pub(crate) fn load_phi3_model_files(
     info: &HuggingFaceModelInfo,
-    device: &Device,
-) -> Result<(Phi3, Tokenizer)> {
+) -> Result<(Device, Phi3, Tokenizer)> {
+    let device = device()?;
     let dtype = if device.is_cuda() {
         DType::BF16
     } else {
@@ -786,13 +814,13 @@ pub(crate) fn load_phi3_model_files(
         .iter()
         .map(|v| std::path::PathBuf::from(construct_model_file_path(&info.mirror, v)))
         .collect::<Vec<_>>();
-    let vb = unsafe { VarBuilder::from_mmaped_safetensors(&filenames, dtype, device)? };
+    let vb = unsafe { VarBuilder::from_mmaped_safetensors(&filenames, dtype, &device)? };
     let config_filename = construct_model_file_path(&info.mirror, "config.json");
     let config = std::fs::read_to_string(config_filename)?;
     let config: Phi3Config = serde_json::from_str(&config)?;
     let phi3 = Phi3::new(&config, vb)?;
     let tokenizer = init_tokenizer(&info.repository)?;
-    Ok((phi3, tokenizer))
+    Ok((device, phi3, tokenizer))
 }
 
 fn get_model_files(info: &HuggingFaceModelInfo) -> Result<Vec<String>> {
@@ -809,10 +837,10 @@ fn get_model_files(info: &HuggingFaceModelInfo) -> Result<Vec<String>> {
 
 pub(crate) fn load_llama_model_files(
     info: &HuggingFaceModelInfo,
-    device: &Device,
-) -> Result<(Llama, LlamaCache, Tokenizer, Option<u32>)> {
+) -> Result<(Device, Llama, LlamaCache, Tokenizer, Option<u32>)> {
     log::info!("load_llama_model_files start");
     let tokenizer = init_tokenizer(&info.repository)?;
+    let device = device()?;
 
     let config_filename = construct_model_file_path(&info.repository, "config.json");
     let config: LlamaConfig = serde_json::from_slice(&std::fs::read(config_filename)?)?;
@@ -822,18 +850,18 @@ pub(crate) fn load_llama_model_files(
         .or_else(|| tokenizer.token_to_id("</s>"));
     let filenames = get_model_files(info)?;
     let dtype = DType::F16;
-    let cache = LlamaCache::new(true, dtype, &config, device)?;
-    let vb = unsafe { VarBuilder::from_mmaped_safetensors(&filenames, dtype, device)? };
+    let cache = LlamaCache::new(true, dtype, &config, &device)?;
+    let vb = unsafe { VarBuilder::from_mmaped_safetensors(&filenames, dtype, &device)? };
     let m = Llama::load(vb, &config)?;
     log::info!("load_llama_model_files end");
-    Ok((m, cache, tokenizer, eos_token_id))
+    Ok((device, m, cache, tokenizer, eos_token_id))
 }
 
 pub(crate) fn load_gemma_model_files(
     info: &HuggingFaceModelInfo,
-    device: &Device,
-) -> Result<(GemmaModel, Tokenizer)> {
+) -> Result<(Device, GemmaModel, Tokenizer)> {
     let tokenizer = init_tokenizer(&info.repository)?;
+    let device = device()?;
 
     let config_filename = construct_model_file_path(&info.repository, "config.json");
     let config: GemmaConfig = serde_json::from_reader(std::fs::File::open(config_filename)?)?;
@@ -843,9 +871,9 @@ pub(crate) fn load_gemma_model_files(
         DType::F32
     };
     let filenames = get_model_files(info)?;
-    let vb = unsafe { VarBuilder::from_mmaped_safetensors(&filenames, dtype, device)? };
+    let vb = unsafe { VarBuilder::from_mmaped_safetensors(&filenames, dtype, &device)? };
     let model = GemmaModel::new(device.is_cuda(), &config, vb)?;
-    Ok((model, tokenizer))
+    Ok((device, model, tokenizer))
 }
 
 pub(crate) fn load_pytorch_mode_files(info: &HuggingFaceModelInfo, device: &Device) -> Result<()> {

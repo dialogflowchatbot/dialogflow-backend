@@ -15,7 +15,7 @@ use super::huggingface::{load_bert_model_files, HuggingFaceModel, HuggingFaceMod
 use crate::man::settings;
 use crate::result::{Error, Result};
 
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(tag = "id", content = "model")]
 pub(crate) enum SentenceEmbeddingProvider {
     HuggingFace(HuggingFaceModel),

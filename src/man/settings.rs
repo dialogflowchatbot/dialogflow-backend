@@ -1,5 +1,7 @@
+use std::collections::HashMap;
 use std::default::Default;
 use std::net::SocketAddr;
+use std::sync::{LazyLock, Mutex};
 
 use axum::body::Bytes;
 use axum::extract::Query;
@@ -9,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 use crate::ai::huggingface::HuggingFaceModel;
-use crate::ai::{completion, embedding, huggingface};
+use crate::ai::{chat, completion, embedding, huggingface};
 use crate::db;
 use crate::result::{Error, Result};
 use crate::robot::dto::RobotQuery;
@@ -17,6 +19,9 @@ use crate::web::server::{self, to_res};
 
 pub(crate) const TABLE: redb::TableDefinition<&str, &[u8]> = redb::TableDefinition::new("settings");
 pub(crate) const SETTINGS_KEY: &str = "global-settings";
+
+static SETTINGS_CACHE: LazyLock<Mutex<HashMap<String, Settings>>> =
+    LazyLock::new(|| Mutex::new(HashMap::with_capacity(32)));
 
 #[derive(Deserialize, Serialize)]
 pub(crate) struct HfModelDownload {
@@ -38,10 +43,12 @@ pub(crate) struct GlobalSettings {
     pub(crate) hf_model_download: HfModelDownload,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub(crate) struct Settings {
     #[serde(rename = "maxSessionIdleSec")]
     pub(crate) max_session_idle_sec: u32,
+    #[serde(rename = "chatProvider")]
+    pub(crate) chat_provider: ChatProvider,
     #[serde(rename = "textGenerationProvider")]
     pub(crate) text_generation_provider: TextGenerationProvider,
     #[serde(rename = "sentenceEmbeddingProvider")]
@@ -91,7 +98,23 @@ pub(crate) struct Settings {
 //     assert_eq!(v["embeddingProvider"]["provider"], "HuggingFace");
 // }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
+pub(crate) struct ChatProvider {
+    pub(crate) provider: chat::ChatProvider,
+    #[serde(rename = "apiUrl")]
+    pub(crate) api_url: String,
+    #[serde(rename = "apiKey")]
+    pub(crate) api_key: String,
+    pub(crate) model: String,
+    #[serde(rename = "connectTimeoutMillis")]
+    pub(crate) connect_timeout_millis: u16,
+    #[serde(rename = "readTimeoutMillis")]
+    pub(crate) read_timeout_millis: u16,
+    #[serde(rename = "maxResponseTokenLength")]
+    pub(crate) max_response_token_length: u32,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
 pub(crate) struct TextGenerationProvider {
     pub(crate) provider: completion::TextGenerationProvider,
     #[serde(rename = "apiUrl")]
@@ -107,7 +130,7 @@ pub(crate) struct TextGenerationProvider {
     pub(crate) max_response_token_length: u32,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub(crate) struct SentenceEmbeddingProvider {
     pub(crate) provider: embedding::SentenceEmbeddingProvider,
     #[serde(rename = "similarityThreshold")]
@@ -142,6 +165,17 @@ impl Default for Settings {
     fn default() -> Self {
         Settings {
             max_session_idle_sec: 1800,
+            chat_provider: ChatProvider {
+                provider: chat::ChatProvider::HuggingFace(
+                    huggingface::HuggingFaceModel::TinyLlama1_1bChatV1_0,
+                ),
+                api_url: String::new(),
+                api_key: String::new(),
+                model: String::new(),
+                connect_timeout_millis: 2000,
+                read_timeout_millis: 10000,
+                max_response_token_length: 10,
+            },
             text_generation_provider: TextGenerationProvider {
                 provider: completion::TextGenerationProvider::HuggingFace(
                     huggingface::HuggingFaceModel::TinyLlama1_1bChatV1_0,
@@ -209,6 +243,11 @@ pub(crate) async fn rest_get_global_settings() -> impl IntoResponse {
 }
 
 pub(crate) fn get_settings(robot_id: &str) -> Result<Option<Settings>> {
+    let l = SETTINGS_CACHE.lock()?;
+    let op = l.get(robot_id);
+    if let Some(s) = op {
+        return Ok(Some(s.clone()));
+    }
     db::query(TABLE, robot_id)
 }
 
@@ -220,7 +259,7 @@ pub(crate) async fn save(
     Query(q): Query<RobotQuery>,
     Json(data): Json<Settings>,
 ) -> impl IntoResponse {
-    to_res(save_settings(&q.robot_id, &data))
+    to_res(save_settings(&q.robot_id, data))
 }
 
 pub(crate) fn save_global_settings(data: &GlobalSettings) -> Result<()> {
@@ -238,7 +277,7 @@ pub(crate) async fn rest_save_global_settings(
     to_res(save_global_settings(&data))
 }
 
-pub(crate) fn save_settings(robot_id: &str, data: &Settings) -> Result<()> {
+pub(crate) fn save_settings(robot_id: &str, data: Settings) -> Result<()> {
     if let completion::TextGenerationProvider::HuggingFace(m) =
         &data.text_generation_provider.provider
     {
@@ -257,7 +296,10 @@ pub(crate) fn save_settings(robot_id: &str, data: &Settings) -> Result<()> {
             }
         }
     }
-    db::write(TABLE, robot_id, &data)
+    db::write(TABLE, robot_id, &data)?;
+    let mut l = SETTINGS_CACHE.lock()?;
+    l.insert(String::from(robot_id), data);
+    Ok(())
 }
 
 pub(crate) async fn smtp_test(Json(settings): Json<Settings>) -> impl IntoResponse {

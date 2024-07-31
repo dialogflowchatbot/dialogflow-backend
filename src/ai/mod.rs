@@ -1,3 +1,4 @@
+pub(crate) mod chat;
 pub(crate) mod completion;
 pub(crate) mod crud;
 pub(crate) mod embedding;

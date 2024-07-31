@@ -1,8 +1,4 @@
-use std::collections::HashMap;
-// use std::io::Write;
-use std::sync::{Mutex, OnceLock};
-
-use candle::{DType, Tensor};
+use candle::{DType, Device, Tensor};
 use candle_transformers::generation::LogitsProcessor;
 use candle_transformers::models::gemma::Model as GemmaModel;
 // use crossbeam_channel::Sender;
@@ -10,42 +6,42 @@ use frand::Rand;
 use tokenizers::Tokenizer;
 use tokio::sync::mpsc::Sender;
 
-use super::huggingface::{device, load_gemma_model_files, HuggingFaceModelInfo};
 use crate::result::{Error, Result};
 
-static TEXT_GENERATION_MODEL: OnceLock<Mutex<HashMap<String, (GemmaModel, Tokenizer)>>> =
-    OnceLock::new();
+// static TEXT_GENERATION_MODEL: OnceLock<Mutex<HashMap<String, (GemmaModel, Tokenizer)>>> =
+//     OnceLock::new();
 
-pub(super) fn replace_model_cache(robot_id: &str, info: &HuggingFaceModelInfo) -> Result<()> {
-    let device = device()?;
-    let c = load_gemma_model_files(info, &device)?;
-    if let Some(lock) = TEXT_GENERATION_MODEL.get() {
-        if let Ok(mut cache) = lock.lock() {
-            cache.insert(String::from(robot_id), c);
-        }
-    }
-    Ok(())
-}
+// pub(super) fn replace_model_cache(robot_id: &str, info: &HuggingFaceModelInfo) -> Result<()> {
+//     let device = device()?;
+//     let c = load_gemma_model_files(info, &device)?;
+//     if let Some(lock) = TEXT_GENERATION_MODEL.get() {
+//         if let Ok(mut cache) = lock.lock() {
+//             cache.insert(String::from(robot_id), c);
+//         }
+//     }
+//     Ok(())
+// }
 
 pub(super) fn gen_text(
-    robot_id: &str,
-    info: &HuggingFaceModelInfo,
+    device: &Device,
+    model: &GemmaModel,
+    tokenizer: &Tokenizer,
     prompt: &str,
     sample_len: usize,
     top_p: Option<f64>,
     sender: &Sender<String>,
 ) -> Result<()> {
-    let device = device()?;
-    let lock = TEXT_GENERATION_MODEL.get_or_init(|| Mutex::new(HashMap::with_capacity(32)));
-    let mut model = lock.lock().unwrap_or_else(|e| {
-        log::warn!("{:#?}", &e);
-        e.into_inner()
-    });
-    if !model.contains_key(robot_id) {
-        let r = load_gemma_model_files(info, &device)?;
-        model.insert(String::from(robot_id), r);
-    };
-    let (model, tokenizer) = model.get_mut(robot_id).unwrap();
+    // let device = device()?;
+    // let lock = TEXT_GENERATION_MODEL.get_or_init(|| Mutex::new(HashMap::with_capacity(32)));
+    // let mut model = lock.lock().unwrap_or_else(|e| {
+    //     log::warn!("{:#?}", &e);
+    //     e.into_inner()
+    // });
+    // if !model.contains_key(robot_id) {
+    //     let r = load_gemma_model_files(info, &device)?;
+    //     model.insert(String::from(robot_id), r);
+    // };
+    // let (model, tokenizer) = model.get(robot_id).unwrap();
     let mut tokens = match tokenizer.encode(prompt, true) {
         Ok(t) => t.get_ids().to_vec(),
         Err(e) => return Err(Error::ErrorWithMessage(format!("{}", &e))),

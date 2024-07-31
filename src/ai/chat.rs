@@ -2,7 +2,6 @@ use core::time::Duration;
 use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex};
 
-// use crossbeam_channel::Sender;
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -12,39 +11,16 @@ use crate::ai::huggingface::{HuggingFaceModel, LoadedHuggingFaceModel};
 use crate::man::settings;
 use crate::result::{Error, Result};
 
-pub(crate) const TEMPERATURE: f64 = 0.7;
-pub(crate) const REPEAT_PENALTY: f32 = 1.1;
-pub(crate) const REPEAT_LAST_N: usize = 64;
+static LOADED_MODELS: LazyLock<Mutex<HashMap<String, LoadedHuggingFaceModel>>> =
+    LazyLock::new(|| Mutex::new(HashMap::with_capacity(32)));
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "id", content = "model")]
-pub(crate) enum TextGenerationProvider {
+pub(crate) enum ChatProvider {
     HuggingFace(HuggingFaceModel),
     OpenAI(String),
     Ollama(String),
 }
-
-#[derive(Deserialize, Serialize)]
-pub(in crate::ai) struct Prompt {
-    pub(in crate::ai) role: String,
-    pub(in crate::ai) content: String,
-}
-
-static LOADED_MODELS: LazyLock<Mutex<HashMap<String, LoadedHuggingFaceModel>>> =
-    LazyLock::new(|| Mutex::new(HashMap::with_capacity(32)));
-
-// pub(crate) fn replace_model_cache(robot_id: &str, m: &HuggingFaceModel) -> Result<()> {
-//     let info = m.get_info();
-//     match info.model_type {
-//         HuggingFaceModelType::Llama => super::llama::replace_model_cache(robot_id, &info),
-//         HuggingFaceModelType::Gemma => super::gemma::replace_model_cache(robot_id, &info),
-//         HuggingFaceModelType::Phi3 => super::phi3::replace_model_cache(robot_id, &info),
-//         HuggingFaceModelType::Bert => Err(Error::ErrorWithMessage(format!(
-//             "Unsuported model type {:?}.",
-//             &info.model_type
-//         ))),
-//     }
-// }
 
 pub(crate) fn replace_model_cache(robot_id: &str, m: &HuggingFaceModel) -> Result<()> {
     let m = LoadedHuggingFaceModel::load(m)?;
@@ -53,26 +29,22 @@ pub(crate) fn replace_model_cache(robot_id: &str, m: &HuggingFaceModel) -> Resul
     Ok(())
 }
 
-pub(crate) async fn completion(
-    robot_id: &str,
-    prompt: &str,
-    sender: &Sender<String>,
-) -> Result<()> {
+pub(crate) async fn chat(robot_id: &str, prompt: &str, sender: &Sender<String>) -> Result<()> {
     if let Some(settings) = settings::get_settings(robot_id)? {
-        log::info!("{:?}", &settings.text_generation_provider.provider);
-        match settings.text_generation_provider.provider {
-            TextGenerationProvider::HuggingFace(m) => {
+        // log::info!("{:?}", &settings.chat_provider.provider);
+        match settings.chat_provider.provider {
+            ChatProvider::HuggingFace(m) => {
                 huggingface(
                     robot_id,
                     &m,
                     prompt,
-                    settings.text_generation_provider.max_response_token_length as usize,
+                    settings.chat_provider.max_response_token_length as usize,
                     sender,
                 )
                 .await?;
                 Ok(())
             }
-            TextGenerationProvider::OpenAI(m) => {
+            ChatProvider::OpenAI(m) => {
                 open_ai(
                     &m,
                     prompt,
@@ -83,7 +55,7 @@ pub(crate) async fn completion(
                 .await?;
                 Ok(())
             }
-            TextGenerationProvider::Ollama(m) => {
+            ChatProvider::Ollama(m) => {
                 ollama(
                     &settings.text_generation_provider.api_url,
                     &m,
@@ -103,74 +75,6 @@ pub(crate) async fn completion(
         )))
     }
 }
-
-#[macro_export]
-macro_rules! sse_send (
-    ($sender: expr, $message: expr) => ({
-        // println!("sse_send0");
-        if !$sender.is_closed() {
-            // println!("sse_send1");
-            let sender = $sender.clone();
-            // tokio::spawn(async move {
-            //     log::info!("sse_send {}",&$message);
-            //     if let Err(e) = sender.send($message).await {
-            //         log::warn!("Failed sending LLM result, err: {:?}", &e);
-            //     }
-            // });
-            tokio::task::spawn_blocking(move || {
-                if let Err(e) = sender.blocking_send($message) {
-                    log::warn!("Failed sending LLM result, err: {:?}", &e);
-                }
-            });
-        }
-    });
-);
-
-// pub(in crate::ai) fn send(sender: &Sender<String>, message: String) -> Result<()> {
-//     let sender = sender.clone();
-//     if let Err(e) = sender.try_send(message) {
-//         match e {
-//             tokio::sync::mpsc::error::TrySendError::Full(m) => Ok(sender.blocking_send(m)?),
-//             tokio::sync::mpsc::error::TrySendError::Closed(_) => Err(e.into()),
-//         }
-//     } else {
-//         Ok(())
-//     }
-// }
-
-// async fn huggingface(
-//     robot_id: &str,
-//     m: &HuggingFaceModel,
-//     prompt: &str,
-//     sample_len: usize,
-//     sender: &Sender<String>,
-// ) -> Result<()> {
-//     let info = m.get_info();
-//     // log::info!("model_type={:?}", &info.model_type);
-//     let new_prompt = info.convert_prompt(prompt)?;
-//     match info.model_type {
-//         HuggingFaceModelType::Gemma => {
-//             super::gemma::gen_text(robot_id, &info, prompt, sample_len, Some(0.5), sender)
-//         }
-//         HuggingFaceModelType::Llama => super::llama::gen_text(
-//             robot_id,
-//             &info,
-//             &new_prompt,
-//             sample_len,
-//             Some(25),
-//             Some(0.5),
-//             sender,
-//         ),
-//         HuggingFaceModelType::Phi3 => {
-//             super::phi3::gen_text(robot_id, &info, prompt, sample_len, Some(0.5), sender)
-//         }
-//         HuggingFaceModelType::Bert => Err(Error::ErrorWithMessage(format!(
-//             "Unsuported model type {:?}.",
-//             &info.model_type
-//         ))),
-//     }
-//     // Ok(())
-// }
 
 async fn huggingface(
     robot_id: &str,
@@ -261,7 +165,7 @@ async fn open_ai(
                                         if let Some(s) = content.as_str() {
                                             let m = String::from(s);
                                             log::info!("OpenAI push {}", &m);
-                                            sse_send!(sender, m);
+                                            crate::sse_send!(sender, m);
                                         }
                                     }
                                 }
@@ -284,7 +188,7 @@ async fn ollama(
     sample_len: u32,
     sender: &Sender<String>,
 ) -> Result<()> {
-    let prompts: Vec<Prompt> = serde_json::from_str(s)?;
+    let prompts: Vec<super::completion::Prompt> = serde_json::from_str(s)?;
     let mut prompt = String::with_capacity(32);
     for p in prompts.iter() {
         if p.role.eq("user") {
@@ -321,7 +225,7 @@ async fn ollama(
                 if let Some(s) = res.as_str() {
                     let m = String::from(s);
                     log::info!("Ollama push {}", &m);
-                    sse_send!(sender, m);
+                    crate::sse_send!(sender, m);
                 }
             }
         }
