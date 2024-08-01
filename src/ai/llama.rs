@@ -125,7 +125,7 @@ pub(super) fn gen_text(
             break;
         }
         if let Some(t) = tokenizer.next_token(next_token)? {
-            log::info!("{&t}");
+            // log::info!("{&t}");
             // std::io::stdout().flush()?;
             // if let Err(e) = sender.try_send(t) {
             //     log::warn!(
