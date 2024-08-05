@@ -23,7 +23,7 @@ pub(crate) enum SentenceEmbeddingProvider {
     Ollama(String),
 }
 
-pub(crate) async fn embedding(robot_id: &str, s: &str) -> Result<(Vec<f32>, u8)> {
+pub(crate) async fn embedding(robot_id: &str, s: &str) -> Result<(Vec<f32>, f32)> {
     if let Some(settings) = settings::get_settings(robot_id)? {
         let v = match settings.sentence_embedding_provider.provider {
             SentenceEmbeddingProvider::HuggingFace(m) => hugging_face(robot_id, &m.get_info(), s),

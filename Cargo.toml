@@ -15,7 +15,7 @@ name = "dialogflow"
 [dependencies]
 # artful = "0.1.1"
 anyhow = "1.0"
-axum = {version = "0.7", features = ["query", "tokio"]}
+axum = {version = "0.7", features = ["query", "tokio", "macros"]}
 bigdecimal = "0.4"
 # candle-core = { git = "https://github.com/huggingface/candle.git", version = "0.5.1" }
 candle = { version = "0.6", package = "candle-core", default-features = false }
@@ -38,7 +38,7 @@ futures-util = "0.3"
 itoa = "1.0"
 # jieba-rs = "0.6.7"
 # lancedb = "0.4"
-oasysdb = "0.6"
+oasysdb = "0.7"
 # once_cell = "1.19"
 #ort = { version = "=2.0.0-rc.0", default-features = false }
 redb = "2.1"
@@ -64,6 +64,7 @@ log = "0.4"
 env_logger = "0.11"
 lettre = { version = "0.11", features = ["tokio1", "smtp-transport", "tokio1-native-tls", "pool"]}
 unicase = "2.7.0"
+sqlx = { version = "0.7", default-features = false, features = ["runtime-tokio", "sqlite", "macros"] }
 # triple_accel = "0.4.0"
 
 [build-dependencies]

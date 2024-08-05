@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::vec::Vec;
 
+use axum::debug_handler;
 use axum::extract::Query;
 use axum::response::IntoResponse;
 use axum::Json;
@@ -186,46 +187,52 @@ fn add_intent(robot_id: &str, intent_name: &str) -> Result<()> {
 }
 
 pub(crate) async fn remove(Json(params): Json<IntentFormData>) -> impl IntoResponse {
-    let r = detector::delete_all_embeddings(&params.robot_id, params.id.as_str()).and_then(|_| {
-        db_executor!(
-            db::remove,
-            &params.robot_id,
-            TABLE_SUFFIX,
-            params.id.as_str()
-        )
+    let r = crate::db::embedding::remove_by_intent_id(&params.robot_id, params.id.as_str())
+        .await
         .and_then(|_| {
-            params
-                .data
-                .parse::<usize>()
-                .map_err(|e| {
-                    log::error!("{:?}", &e);
-                    Error::ErrorWithMessage(String::from("Invalid idx parameter."))
-                })
-                .and_then(|idx| {
-                    let mut intents: Vec<Intent> =
-                        db_executor!(db::query, &params.robot_id, TABLE_SUFFIX, INTENT_LIST_KEY)
-                            .unwrap()
-                            .unwrap();
-                    intents.remove(idx);
-                    // db::write(TABLE, INTENT_LIST_KEY, &intents)
-                    db_executor!(
-                        db::write,
-                        &params.robot_id,
-                        TABLE_SUFFIX,
-                        INTENT_LIST_KEY,
-                        &intents
-                    )
-                })
-        })
-        // let r = db::remove(TABLE, params.id.as_str());
-        // if let Ok(idx) = params.data.parse() {
-        //     let mut intents: Vec<Intent> = db::query(TABLE, INTENT_LIST_KEY).unwrap().unwrap();
-        //     intents.remove(idx);
-        //     if let Err(e) = db::write(TABLE, INTENT_LIST_KEY, &intents) {
-        //         log::error!("Update intents list failed: {:?}", &e);
-        //     }
-        // }
-    });
+            db_executor!(
+                db::remove,
+                &params.robot_id,
+                TABLE_SUFFIX,
+                params.id.as_str()
+            )
+            .and_then(|_| {
+                params
+                    .data
+                    .parse::<usize>()
+                    .map_err(|e| {
+                        log::error!("{:?}", &e);
+                        Error::ErrorWithMessage(String::from("Invalid idx parameter."))
+                    })
+                    .and_then(|idx| {
+                        let mut intents: Vec<Intent> = db_executor!(
+                            db::query,
+                            &params.robot_id,
+                            TABLE_SUFFIX,
+                            INTENT_LIST_KEY
+                        )
+                        .unwrap()
+                        .unwrap();
+                        intents.remove(idx);
+                        // db::write(TABLE, INTENT_LIST_KEY, &intents)
+                        db_executor!(
+                            db::write,
+                            &params.robot_id,
+                            TABLE_SUFFIX,
+                            INTENT_LIST_KEY,
+                            &intents
+                        )
+                    })
+            })
+            // let r = db::remove(TABLE, params.id.as_str());
+            // if let Ok(idx) = params.data.parse() {
+            //     let mut intents: Vec<Intent> = db::query(TABLE, INTENT_LIST_KEY).unwrap().unwrap();
+            //     intents.remove(idx);
+            //     if let Err(e) = db::write(TABLE, INTENT_LIST_KEY, &intents) {
+            //         log::error!("Update intents list failed: {:?}", &e);
+            //     }
+            // }
+        });
     to_res(r)
 }
 
@@ -360,6 +367,7 @@ pub(crate) async fn remove_regex(Json(params): Json<IntentFormData>) -> impl Int
     to_res(r)
 }
 
+#[debug_handler]
 pub(crate) async fn add_phrase(
     Query(query): Query<IntentFormData>,
     Json(params): Json<IntentFormData>,
@@ -379,8 +387,10 @@ pub(crate) async fn add_phrase(
     let mut d = r.unwrap();
     let r = detector::save_intent_embedding(&params.robot_id, key, &params.data).await;
     if r.is_err() {
-        return to_res(r.map(|_| ()));
+        // return to_res(r.map(|_| ()));
+        return to_res(Ok(()));
     }
+    // let r:Result<i64> = Ok(0i64);
     d.phrases.push(IntentPhraseData {
         id: r.unwrap(),
         phrase: String::from(params.data.as_str()),
@@ -401,35 +411,63 @@ pub(crate) async fn add_phrase(
 }
 
 pub(crate) async fn remove_phrase(Json(params): Json<IntentFormData>) -> impl IntoResponse {
-    let r = params
-        .data
-        .parse::<usize>()
-        .map_err(|e| {
+    let r = params.data.parse::<usize>();
+    let idx = match r {
+        Ok(n) => n,
+        Err(e) => {
             log::error!("{:?}", e);
-            Error::ErrorWithMessage(String::from("Invalid parameter"))
-        })
-        .and_then(|idx| {
-            let key = params.id.as_str();
-            let result: Result<Option<IntentDetail>> =
-                db_executor!(db::query, &params.robot_id, TABLE_SUFFIX, key);
-            result.and_then(|mut op| {
-                if op.is_some() {
-                    let mut d = op.as_mut().unwrap();
-                    let phrase = d.phrases.remove(idx);
-                    detector::delete_intent_embedding(&params.robot_id, key, phrase.id).and_then(
-                        |_| {
-                            let idx = d.intent_idx;
-                            change_num(&params.robot_id, key, &mut d, |i: &mut Vec<Intent>| {
-                                i[idx].phrase_num = i[idx].phrase_num - 1
-                            })
-                        },
-                    )
-                } else {
-                    Ok(())
-                }
-            })
-        });
-    to_res(r)
+            return to_res(Err(Error::ErrorWithMessage(String::from(
+                "Invalid parameter",
+            ))));
+        }
+    };
+    let key = params.id.as_str();
+    let r: Result<Option<IntentDetail>> =
+        db_executor!(db::query, &params.robot_id, TABLE_SUFFIX, key);
+    if let Ok(result) = r {
+        if let Some(mut d) = result {
+            let phrase = d.phrases.remove(idx);
+            let r = crate::db::embedding::remove(&params.robot_id, phrase.id).await;
+            if let Err(e) = r {
+                return to_res(Err(e));
+            }
+            let idx = d.intent_idx;
+            return to_res(change_num(
+                &params.robot_id,
+                key,
+                &mut d,
+                |i: &mut Vec<Intent>| i[idx].phrase_num = i[idx].phrase_num - 1,
+            ));
+        }
+    }
+    to_res(Ok(()))
+    // let r = params
+    //     .data
+    //     .parse::<usize>()
+    //     .map_err(|e| {
+    //         log::error!("{:?}", e);
+    //         Error::ErrorWithMessage(String::from("Invalid parameter"))
+    //     })
+    //     .and_then(|idx| {
+    //         let key = params.id.as_str();
+    //         let result: Result<Option<IntentDetail>> =
+    //             db_executor!(db::query, &params.robot_id, TABLE_SUFFIX, key);
+    //         result.and_then(|mut op| {
+    //             if op.is_some() {
+    //                 let mut d = op.as_mut().unwrap();
+    //                 let phrase = d.phrases.remove(idx);
+    //                 crate::db::embedding::remove(&params.robot_id, key, phrase.id).await.and_then(|_| {
+    //                     let idx = d.intent_idx;
+    //                     change_num(&params.robot_id, key, &mut d, |i: &mut Vec<Intent>| {
+    //                         i[idx].phrase_num = i[idx].phrase_num - 1
+    //                     })
+    //                 })
+    //             } else {
+    //                 Ok(())
+    //             }
+    //         })
+    //     });
+    // to_res(r)
 }
 
 pub(crate) async fn detect(Json(params): Json<IntentFormData>) -> impl IntoResponse {

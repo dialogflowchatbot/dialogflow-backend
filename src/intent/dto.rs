@@ -32,7 +32,7 @@ impl Intent {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct IntentPhraseData {
-    pub(crate) id: usize,
+    pub(crate) id: i64,
     pub(crate) phrase: String,
 }
 

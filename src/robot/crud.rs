@@ -81,7 +81,7 @@ pub(crate) async fn detail(Query(q): Query<RobotQuery>) -> impl IntoResponse {
 }
 
 pub(crate) async fn delete(Query(q): Query<RobotQuery>) -> impl IntoResponse {
-    to_res(purge(&q.robot_id))
+    to_res(purge(&q.robot_id).await)
 }
 
 fn delete_entry(entry: &DirEntry) -> Result<()> {
@@ -107,13 +107,14 @@ fn delete_dirs(dir: &Path, cb: &dyn Fn(&DirEntry) -> Result<()>) -> Result<()> {
     Ok(())
 }
 
-fn purge(robot_id: &str) -> Result<()> {
-    let root = &format!("{}{}", crate::intent::detector::SAVING_PATH_ROOT, robot_id);
-    let path = Path::new(&root);
-    if path.exists() {
-        delete_dirs(&path, &delete_entry)?;
-        std::fs::remove_dir(path)?;
-    }
+async fn purge(robot_id: &str) -> Result<()> {
+    crate::db::embedding::remove_table(robot_id).await?;
+    // let root = &format!("{}{}", crate::intent::detector::SAVING_PATH_ROOT, robot_id);
+    // let path = Path::new(&root);
+    // if path.exists() {
+    //     delete_dirs(&path, &delete_entry)?;
+    //     std::fs::remove_dir(path)?;
+    // }
     // if let Err(e) = std::fs::remove_dir(format!(
     //     "{}{}",
     //     crate::intent::detector::SAVING_PATH_ROOT,

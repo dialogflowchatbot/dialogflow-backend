@@ -1,0 +1,169 @@
+use core::time::Duration;
+
+use std::fs::OpenOptions;
+use std::path::Path;
+use std::sync::OnceLock;
+use std::vec::Vec;
+
+use futures_util::StreamExt;
+use sqlx::{
+    pool::PoolOptions,
+    sqlite::{SqliteArguments, SqliteRow},
+    Sqlite, SqlitePool,
+};
+
+use crate::result::{Error, Result};
+
+type SqliteConnPool = sqlx::Pool<Sqlite>;
+
+#[macro_export]
+macro_rules! sql_query_one (
+    ($sql: expr, $($bind: expr),*) => ({
+        let pool = match db::mysql::get_pool() {
+            Some(p) => p,
+            None => return Err("mysql get pool failed".into()),
+        };
+
+        match sqlx::query_as(&$sql)$(.bind($bind))*.fetch_one(pool).await {
+            Ok(u) => Ok(Some(u)),
+            Err(e) => match e {
+                sqlx::Error::RowNotFound => Ok(None),
+                _ => Err(e.into())
+            },
+        }
+    });
+    ($sql: expr) => (query_one!($sql,));
+);
+
+// static DATA_SOURCE: OnceCell<SqliteConnPool> = OnceCell::new();
+static DATA_SOURCE: OnceLock<SqliteConnPool> = OnceLock::new();
+// static DATA_SOURCES: OnceLock<Mutex<HashMap<String, SqliteConnPool>>> = OnceLock::new();
+
+pub(crate) fn get_sqlite_path() -> Result<String> {
+    let path = Path::new(".").join("data").join("intentev").join("ev.dat");
+    if path.is_dir() {
+        return Err(Error::ErrorWithMessage(String::from(
+            "Created database file failed, there is a directory called: ev.dat",
+        )));
+    }
+    let s = format!("sqlite://{}?mode=rw", path.display());
+    Ok(s)
+}
+
+pub(crate) async fn init_datasource() -> Result<()> {
+    // if path.exists() {
+    //     return Ok(());
+    // }
+    // match OpenOptions::new()
+    //     .read(false)
+    //     .write(true)
+    //     .create_new(true)
+    //     .open(path.as_path())
+    // {
+    //     Ok(_f) => {}
+    //     // Err(e: ErrorKind::NotFound) => None,
+    //     Err(e) => {
+    //         return Err(Error::ErrorWithMessage(format!(
+    //             "Created database file failed, err: {:?}",
+    //             &e
+    //         )))
+    //     }
+    // };
+    let pool_ops = PoolOptions::<Sqlite>::new()
+        .min_connections(1)
+        .max_connections(100)
+        .acquire_timeout(Duration::from_secs(5))
+        .test_before_acquire(true);
+    let conn_str = get_sqlite_path()?;
+    let pool = pool_ops.connect(conn_str.as_str()).await?;
+    DATA_SOURCE
+        .set(pool)
+        .map_err(|_| Error::ErrorWithMessage(String::from("Datasource has been set.")))
+    /*
+    下面这个不会打印，解决：
+    1、把map换成for_each
+    2、由于map是lazy的，所以需要在map后面加.collect()
+     */
+    /*
+    match sqlite_get_list::<Tag>("SELECT id, name FROM blog_tag ORDER BY id DESC", None).await {
+        Ok(tags) => tags.iter().map(|tag| {
+            println!("{}", &tag.name);
+            tag::put_id_name(tag.id, &tag.name);
+        }),
+        Err(e) => panic!("{:?}", e),
+    };
+    */
+}
+
+pub async fn shutdown() {
+    // let mut r = match DATA_SOURCES.lock() {
+    //     Ok(l) => l,
+    //     Err(e) => e.into_inner(),
+    // };
+    // let all_keys: Vec<String> = r.keys().map(|k| String::from(k)).collect();
+    // let mut pools: Vec<SqliteConnPool> = Vec::with_capacity(all_keys.len());
+    // for key in all_keys {
+    //     let v = r.remove(&key).unwrap();
+    //     pools.push(v);
+    // }
+    // tokio::task::spawn_blocking(|| async move {
+    //     for p in pools.iter() {
+    //         p.close().await;
+    //     }
+    // });
+    DATA_SOURCE.get().unwrap().close().await;
+}
+
+pub(crate) async fn create_table(robot_id: &str) -> Result<()> {
+    // println!("Init database");
+    // let ddl = include_str!("./embedding_ddl.sql");
+    let sql = format!(
+        "CREATE TABLE abc (
+            id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+            vectors JSON NOT NULL
+            );"
+    );
+    // println!("ddl = {}", ddl);
+    let mut stream = sqlx::raw_sql(&sql).execute_many(DATA_SOURCE.get().unwrap());
+    while let Some(res) = stream.next().await {
+        match res {
+            Ok(_r) => println!("Initialized table"),
+            Err(e) => log::error!("{:?}", e),
+        }
+    }
+    // let dml = include_str!("../resource/sql/dml.sql");
+    // if let Err(e) = sqlx::query(dml).execute(&pool).await {
+    //     panic!("{:?}", e);
+    // }
+    Ok(())
+}
+
+pub(crate) async fn add(robot_id: &str, intent_name: &str, vector: &Vec<f32>) -> Result<i64> {
+    // check_datasource(robot_id, intent_id).await?;
+    let sql = format!("INSERT INTO {} (intent_name,vectors)VALUES(?)", robot_id);
+    let last_insert_rowid = sqlx::query::<Sqlite>(&sql)
+        .bind(intent_name)
+        .bind(serde_json::to_string(vector)?)
+        .execute(DATA_SOURCE.get().unwrap())
+        .await?
+        .last_insert_rowid();
+    Ok(last_insert_rowid)
+    // Ok(0i64)
+}
+
+pub(crate) async fn remove(robot_id: &str, id: i64) -> Result<()> {
+    let sql = format!("DELETE FROM {} WHERE id=?", robot_id);
+    sqlx::query::<Sqlite>(&sql)
+        .bind(id)
+        .execute(DATA_SOURCE.get().unwrap())
+        .await?;
+    Ok(())
+}
+
+pub(crate) async fn remove_by_intent_id(robot_id: &str, intent_id: &str) -> Result<()> {
+    Ok(())
+}
+
+pub(crate) async fn remove_table(robot_id: &str) -> Result<()> {
+    Ok(())
+}

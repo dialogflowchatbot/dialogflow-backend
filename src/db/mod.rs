@@ -1,3 +1,5 @@
+pub(crate) mod embedding;
+
 use std::borrow::{Borrow, Cow};
 use std::sync::LazyLock;
 use std::vec::Vec;

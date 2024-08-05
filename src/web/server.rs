@@ -84,6 +84,10 @@ pub async fn start_app() {
         listening_ip.push_str(&settings.ip);
     }
 
+    crate::db::embedding::init_datasource()
+        .await
+        .expect("Failed initialize vector database.");
+
     let (sender, recv) = tokio::sync::oneshot::channel::<()>();
     tokio::spawn(crate::flow::rt::context::clean_expired_session(recv));
 
@@ -344,6 +348,8 @@ async fn shutdown_signal(sender: tokio::sync::oneshot::Sender<()>) {
         Ok(_) => {}
         Err(_) => log::info!("中断 ctx 失败"),
     };
+
+    crate::db::embedding::shutdown().await;
 
     let m = if *IS_EN {
         "This program has been terminated"

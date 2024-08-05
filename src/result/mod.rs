@@ -167,12 +167,24 @@ impl<T> From<tokio::sync::mpsc::error::SendError<T>> for Error {
 
 impl<T> From<std::sync::PoisonError<T>> for Error {
     fn from(err: std::sync::PoisonError<T>) -> Self {
-        Error::ErrorWithMessage(format!("{:?}", err))
+        Error::ErrorWithMessage(format!("Poison error: {:?}", err))
     }
 }
 
 impl From<std::num::ParseFloatError> for Error {
     fn from(err: std::num::ParseFloatError) -> Self {
-        Error::ErrorWithMessage(format!("{:?}", err))
+        Error::ErrorWithMessage(format!("Parse float error: {:?}", err))
+    }
+}
+
+impl From<sqlx::Error> for Error {
+    fn from(err: sqlx::Error) -> Self {
+        Error::ErrorWithMessage(format!("SQL error: {:?}", err))
+    }
+}
+
+impl From<tokio::task::JoinError> for Error {
+    fn from(err: tokio::task::JoinError) -> Self {
+        Error::ErrorWithMessage(format!("Thread join error: {:?}", err))
     }
 }

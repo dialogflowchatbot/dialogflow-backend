@@ -134,7 +134,7 @@ pub(crate) struct TextGenerationProvider {
 pub(crate) struct SentenceEmbeddingProvider {
     pub(crate) provider: embedding::SentenceEmbeddingProvider,
     #[serde(rename = "similarityThreshold")]
-    pub(crate) similarity_threshold: u8,
+    pub(crate) similarity_threshold: f32,
     #[serde(rename = "apiUrl")]
     pub(crate) api_url: String,
     #[serde(rename = "apiKey")]
@@ -191,7 +191,7 @@ impl Default for Settings {
                 provider: embedding::SentenceEmbeddingProvider::HuggingFace(
                     huggingface::HuggingFaceModel::AllMiniLML6V2,
                 ),
-                similarity_threshold: 85u8,
+                similarity_threshold: 0.85f32,
                 api_url: String::new(),
                 api_key: String::new(),
                 model: String::new(),
