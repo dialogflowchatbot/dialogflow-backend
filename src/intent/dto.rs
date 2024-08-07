@@ -39,6 +39,8 @@ pub(crate) struct IntentPhraseData {
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct IntentDetail {
     pub(crate) intent_idx: usize,
+    pub(crate) intent_id: String,
+    pub(crate) intent_name: String,
     pub(crate) keywords: Vec<String>,
     pub(crate) regexes: Vec<String>,
     pub(crate) phrases: Vec<IntentPhraseData>,

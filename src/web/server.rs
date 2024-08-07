@@ -56,8 +56,12 @@ fn get_lang() -> String {
 // }
 
 pub async fn start_app() {
+    crate::db::embedding::init_datasource()
+        .await
+        .expect("Failed initialize vector database.");
+
     let settings = {
-        let mut s = crate::db::init().expect("Initialize database failed");
+        let mut s = crate::db::init().await.expect("Initialize database failed");
         for argument in std::env::args() {
             if argument.eq("-rs") {
                 s = settings::GlobalSettings::default();
@@ -83,10 +87,6 @@ pub async fn start_app() {
     if listening_ip.is_empty() {
         listening_ip.push_str(&settings.ip);
     }
-
-    crate::db::embedding::init_datasource()
-        .await
-        .expect("Failed initialize vector database.");
 
     let (sender, recv) = tokio::sync::oneshot::channel::<()>();
     tokio::spawn(crate::flow::rt::context::clean_expired_session(recv));

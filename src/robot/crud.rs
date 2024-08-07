@@ -19,7 +19,15 @@ use crate::{db, web::server::to_res};
 
 const TABLE: TableDefinition<&str, &[u8]> = TableDefinition::new("robots");
 
-pub(crate) fn init(is_en: bool) -> Result<()> {
+fn get_robot_id() -> String {
+    let mut id = String::with_capacity(32);
+    id.push('r');
+    let gen = scru128::new_string();
+    id.push_str(&gen);
+    id
+}
+
+pub(crate) async fn init(is_en: bool) -> Result<()> {
     db::init_table(TABLE)?;
     let name = if is_en {
         "My first robot"
@@ -27,11 +35,11 @@ pub(crate) fn init(is_en: bool) -> Result<()> {
         "我的第一个机器人"
     };
     let d = RobotData {
-        robot_id: scru128::new_string(),
+        robot_id: get_robot_id(),
         robot_name: String::from(name),
         robot_type: RobotType::TextBot,
     };
-    new(&d, is_en)
+    new(&d, is_en).await
 }
 
 pub(crate) async fn save(
@@ -40,8 +48,8 @@ pub(crate) async fn save(
 ) -> impl IntoResponse {
     if d.robot_id.is_empty() {
         let is_en = server::is_en(&headers);
-        d.robot_id = scru128::new_string();
-        if let Err(e) = new(&d, is_en) {
+        d.robot_id = get_robot_id();
+        if let Err(e) = new(&d, is_en).await {
             return to_res(Err(Error::ErrorWithMessage(format!(
                 "Failed to create robot, error detail was: {:?}",
                 &e
@@ -52,10 +60,11 @@ pub(crate) async fn save(
     to_res(r)
 }
 
-fn new(d: &RobotData, is_en: bool) -> Result<()> {
+async fn new(d: &RobotData, is_en: bool) -> Result<()> {
     persist(d)?;
     // 机器人意图
     settings::init(&d.robot_id)?;
+    crate::db::embedding::create_table(&d.robot_id).await?;
     // 意图
     intent::init(&d.robot_id, is_en)?;
     // 变量

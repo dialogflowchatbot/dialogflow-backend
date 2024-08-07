@@ -28,7 +28,7 @@ macro_rules! db_executor (
 );
 
 pub(crate) static DB: LazyLock<Database> = LazyLock::new(|| {
-    let data_folder = std::path::Path::new("./data");
+    let data_folder = std::path::Path::new(".").join("data");
     if !data_folder.exists() {
         std::fs::create_dir(data_folder).expect("Create data directory failed.");
     }
@@ -45,7 +45,7 @@ pub(crate) static DB: LazyLock<Database> = LazyLock::new(|| {
     }
 });
 
-pub(crate) fn init() -> Result<GlobalSettings> {
+pub(crate) async fn init() -> Result<GlobalSettings> {
     let is_en = *server::IS_EN;
 
     // Settings
@@ -55,7 +55,7 @@ pub(crate) fn init() -> Result<GlobalSettings> {
         return Ok(settings::get_global_settings()?.unwrap());
     }
     let settings = settings::init_global()?;
-    robot::init(is_en)?;
+    robot::init(is_en).await?;
     // 流程上下文
     context::init()?;
     Ok(settings)

@@ -6,11 +6,8 @@ use std::sync::OnceLock;
 use std::vec::Vec;
 
 use futures_util::StreamExt;
-use sqlx::{
-    pool::PoolOptions,
-    sqlite::{SqliteArguments, SqliteRow},
-    Sqlite, SqlitePool,
-};
+use oasysdb::prelude::*;
+use sqlx::{pool::PoolOptions, Row, Sqlite};
 
 use crate::result::{Error, Result};
 
@@ -39,8 +36,35 @@ macro_rules! sql_query_one (
 static DATA_SOURCE: OnceLock<SqliteConnPool> = OnceLock::new();
 // static DATA_SOURCES: OnceLock<Mutex<HashMap<String, SqliteConnPool>>> = OnceLock::new();
 
+fn get_idx_db() -> Result<Database> {
+    let mut p = crate::db::embedding::get_sqlite_path();
+    p.pop();
+    // let dir = std::env::temp_dir();
+    let db = Database::open(p, Some(get_sqlite_url()?))?;
+    Ok(db)
+}
+
+async fn create_idx_db(robot_id: &str) -> Result<()> {
+    let config = SourceConfig::new(robot_id, "id", "vectors").with_metadata(vec!["intent_id"]);
+    let params = ParamsIVFPQ::default();
+    let algorithm = IndexAlgorithm::IVFPQ(params);
+    get_idx_db()?
+        .async_create_index(robot_id, algorithm, config)
+        .await?;
+    Ok(())
+}
+
+pub(crate) fn search_idx_db(robot_id: &str, search_vector: Vector) -> Result<Vec<SearchResult>> {
+    let r = get_idx_db()?.search_index(robot_id, search_vector, 1, "")?;
+    Ok(r)
+}
+
 pub(crate) fn get_sqlite_path() -> std::path::PathBuf {
-    Path::new(".").join("data").join("intentev").join("e.dat")
+    let p = Path::new(".").join("data").join("intentev");
+    if !p.exists() {
+        std::fs::create_dir(&p).expect("Create data directory failed.");
+    }
+    p.join("e.dat")
 }
 
 pub(crate) fn get_sqlite_url() -> Result<String> {
@@ -126,38 +150,64 @@ pub(crate) async fn create_table(robot_id: &str) -> Result<()> {
     let sql = format!(
         "CREATE TABLE {} (
             id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+            intent_id TEXT NOT NULL,
             vectors JSON NOT NULL
-            );", robot_id
+            );",
+        robot_id
     );
-    // println!("ddl = {}", ddl);
+    // log::info!("sql = {}", &sql);
     let mut stream = sqlx::raw_sql(&sql).execute_many(DATA_SOURCE.get().unwrap());
     while let Some(res) = stream.next().await {
         match res {
-            Ok(_r) => println!("Initialized table"),
-            Err(e) => log::error!("{:?}", e),
+            Ok(_r) => log::info!("Initialized intent table"),
+            Err(e) => log::error!("Create table failed, err: {:?}", e),
         }
     }
     // let dml = include_str!("../resource/sql/dml.sql");
     // if let Err(e) = sqlx::query(dml).execute(&pool).await {
     //     panic!("{:?}", e);
     // }
-    Ok(())
+    create_idx_db(robot_id).await
 }
 
 pub(crate) async fn add(robot_id: &str, intent_id: &str, vector: &Vec<f32>) -> Result<i64> {
     // check_datasource(robot_id, intent_id).await?;
-    let sql = format!("INSERT INTO {} (intent_id,vectors)VALUES(?)", robot_id);
+    let sql = format!("INSERT INTO {} (intent_id,vectors)VALUES(?,?)", robot_id);
     let last_insert_rowid = sqlx::query::<Sqlite>(&sql)
-    .bind(intent_id)
+        .bind(intent_id)
         .bind(serde_json::to_string(vector)?)
         .execute(DATA_SOURCE.get().unwrap())
         .await?
         .last_insert_rowid();
+    get_idx_db()?.async_refresh_index(robot_id).await?;
     Ok(last_insert_rowid)
     // Ok(0i64)
 }
 
+pub(crate) async fn batch_add(
+    robot_id: &str,
+    intent_id: &str,
+    vectors: &Vec<Vec<f32>>,
+) -> Result<Vec<i64>> {
+    // check_datasource(robot_id, intent_id).await?;
+    let sql = format!("INSERT INTO {} (intent_id,vectors)VALUES(?,?)", robot_id);
+    let mut ids: Vec<i64> = Vec::with_capacity(vectors.len());
+    for v in vectors.iter() {
+        let last_insert_rowid = sqlx::query::<Sqlite>(&sql)
+            .bind(intent_id)
+            .bind(serde_json::to_string(v)?)
+            .execute(DATA_SOURCE.get().unwrap())
+            .await?
+            .last_insert_rowid();
+        ids.push(last_insert_rowid);
+    }
+    get_idx_db()?.async_refresh_index(robot_id).await?;
+    Ok(ids)
+    // Ok(0i64)
+}
+
 pub(crate) async fn remove(robot_id: &str, id: i64) -> Result<()> {
+    get_idx_db()?.delete_from_index(robot_id, vec![RecordID(id as u32)])?;
     let sql = format!("DELETE FROM {} WHERE id=?", robot_id);
     sqlx::query::<Sqlite>(&sql)
         .bind(id)
@@ -167,6 +217,17 @@ pub(crate) async fn remove(robot_id: &str, id: i64) -> Result<()> {
 }
 
 pub(crate) async fn remove_by_intent_id(robot_id: &str, intent_id: &str) -> Result<()> {
+    let sql = format!("SELECT id FROM {} WHERE intent_id=?", robot_id);
+    let results = sqlx::query::<Sqlite>(&sql)
+        .bind(intent_id)
+        .fetch_all(DATA_SOURCE.get().unwrap())
+        .await?;
+    let mut ids: Vec<RecordID> = Vec::with_capacity(results.len());
+    for r in results.iter() {
+        ids.push(RecordID(r.try_get(0)?));
+    }
+    get_idx_db()?.delete_from_index(robot_id, ids)?;
+
     let sql = format!("DELETE FROM {} WHERE intent_id=?", robot_id);
     sqlx::query::<Sqlite>(&sql)
         .bind(intent_id)
@@ -176,6 +237,7 @@ pub(crate) async fn remove_by_intent_id(robot_id: &str, intent_id: &str) -> Resu
 }
 
 pub(crate) async fn remove_table(robot_id: &str) -> Result<()> {
+    get_idx_db()?.delete_index(robot_id)?;
     let sql = format!("DROP TABLE {}", robot_id);
     sqlx::query::<Sqlite>(&sql)
         .execute(DATA_SOURCE.get().unwrap())
