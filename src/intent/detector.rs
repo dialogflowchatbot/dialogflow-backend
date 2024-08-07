@@ -4,9 +4,14 @@ use crate::ai::embedding::embedding;
 use crate::db::embedding as embedding_db;
 use crate::result::{Error, Result};
 
-fn get_embedding_db(robot_id: &str) -> Result<Database> {
-    let db_url = crate::db::embedding::get_sqlite_path()?;
-    let db = Database::open(robot_id, Some(db_url))?;
+fn get_embedding_db() -> Result<Database> {
+    log::info!("1111111");
+    let mut p = crate::db::embedding::get_sqlite_path();
+    p.pop();
+    let dir = std::env::temp_dir();
+    println!("Temporary directory: {}", dir.display());
+    let db = Database::open(p, Some(embedding_db::get_sqlite_url()?))?;
+    log::info!("2222222");
     Ok(db)
 }
 
@@ -18,13 +23,13 @@ pub(crate) async fn detect(robot_id: &str, s: &str) -> Result<Option<String>> {
     // log::info!("detect embedding {}", regex.replace_all(&s, ""));
     let search_vector: Vec<f32> = embedding.0.into();
     let similarity_threshold = embedding.1;
-    let result = get_embedding_db(robot_id)?.search_index(robot_id, search_vector, 1, "")?;
+    let result = get_embedding_db()?.search_index(robot_id, search_vector, 1, "")?;
     // println!("inner intent detect {:?}", now.elapsed());
     if result.len() == 0 {
         if let Some(record) = result.get(0) {
             log::info!("Record distance: {}", record.distance);
             if similarity_threshold >= record.distance {
-                if let Some(data) = record.data.get("intent_name") {
+                if let Some(data) = record.data.get("intent_id") {
                     if let Some(metadata) = data {
                         if let oasysdb::types::record::DataValue::String(s) = metadata {
                             return Ok(Some(String::from(s)));
@@ -45,8 +50,7 @@ pub(crate) async fn save_intent_embedding(robot_id: &str, intent_id: &str, s: &s
         return Err(Error::ErrorWithMessage(err));
     }
     let id = embedding_db::add(robot_id, intent_id, &embedding.0).await?;
-    //todo refresh index
-    get_embedding_db(robot_id)?.refresh_index(robot_id)?;
+    get_embedding_db()?.refresh_index(robot_id)?;
     Ok(id)
 }
 
@@ -72,9 +76,9 @@ pub(crate) async fn save_intent_embeddings(
     //     )));
     // }
     embedding_db::remove_by_intent_id(robot_id, intent_id).await?;
-    let db = get_embedding_db(robot_id)?;
+    let db = get_embedding_db()?;
     db.delete_index(robot_id)?;
-    let config = SourceConfig::new(robot_id, "id", "vectors");
+    let config = SourceConfig::new(robot_id, "id", "vectors").with_metadata(vec!["intent_id"]);
     let params = ParamsIVFPQ::default();
     let algorithm = IndexAlgorithm::IVFPQ(params);
     db.create_index(robot_id, algorithm, config)?;

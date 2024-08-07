@@ -175,7 +175,7 @@ async fn ollama(
     map.insert(String::from("model"), Value::String(String::from(m)));
     let obj = Value::Object(map);
     let body = serde_json::to_string(&obj)?;
-    log::info!("Url {} Body {}", &u, &body);
+    // log::info!("Url {} Body {}", &u, &body);
     let req = client
         .post(u)
         .header("Content-Type", "application/json")
@@ -188,7 +188,7 @@ async fn ollama(
         )));
     }
     // log::info!("Ollama embedding result {}", &r[0..50]);
-    log::info!("Ollama embedding result {}", &r);
+    // log::info!("Ollama embedding result {}", &r);
     let v: Value = serde_json::from_str(&r)?;
     let mut embedding_result: Vec<f32> = Vec::with_capacity(3072);
     if let Some(embedding) = v["embedding"].as_array() {

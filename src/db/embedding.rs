@@ -39,14 +39,19 @@ macro_rules! sql_query_one (
 static DATA_SOURCE: OnceLock<SqliteConnPool> = OnceLock::new();
 // static DATA_SOURCES: OnceLock<Mutex<HashMap<String, SqliteConnPool>>> = OnceLock::new();
 
-pub(crate) fn get_sqlite_path() -> Result<String> {
-    let path = Path::new(".").join("data").join("intentev").join("ev.dat");
+pub(crate) fn get_sqlite_path() -> std::path::PathBuf {
+    Path::new(".").join("data").join("intentev").join("e.dat")
+}
+
+pub(crate) fn get_sqlite_url() -> Result<String> {
+    let path = get_sqlite_path();
     if path.is_dir() {
         return Err(Error::ErrorWithMessage(String::from(
-            "Created database file failed, there is a directory called: ev.dat",
+            "Created database file failed, there is a directory called: e.dat",
         )));
     }
     let s = format!("sqlite://{}?mode=rw", path.display());
+    let s = s.replace("\\", "/");
     Ok(s)
 }
 
@@ -54,27 +59,28 @@ pub(crate) async fn init_datasource() -> Result<()> {
     // if path.exists() {
     //     return Ok(());
     // }
-    // match OpenOptions::new()
-    //     .read(false)
-    //     .write(true)
-    //     .create_new(true)
-    //     .open(path.as_path())
-    // {
-    //     Ok(_f) => {}
-    //     // Err(e: ErrorKind::NotFound) => None,
-    //     Err(e) => {
-    //         return Err(Error::ErrorWithMessage(format!(
-    //             "Created database file failed, err: {:?}",
-    //             &e
-    //         )))
-    //     }
-    // };
+    match OpenOptions::new()
+        .read(false)
+        .write(true)
+        .create(true)
+        .open(get_sqlite_path().as_path())
+    {
+        Ok(_f) => {}
+        // Err(e: ErrorKind::NotFound) => None,
+        Err(e) => {
+            return Err(Error::ErrorWithMessage(format!(
+                "Created database file failed, err: {:?}",
+                &e
+            )))
+        }
+    };
     let pool_ops = PoolOptions::<Sqlite>::new()
         .min_connections(1)
         .max_connections(100)
         .acquire_timeout(Duration::from_secs(5))
         .test_before_acquire(true);
-    let conn_str = get_sqlite_path()?;
+    let conn_str = get_sqlite_url()?;
+    log::info!("Embedding database path: {}", &conn_str);
     let pool = pool_ops.connect(conn_str.as_str()).await?;
     DATA_SOURCE
         .set(pool)
@@ -118,10 +124,10 @@ pub(crate) async fn create_table(robot_id: &str) -> Result<()> {
     // println!("Init database");
     // let ddl = include_str!("./embedding_ddl.sql");
     let sql = format!(
-        "CREATE TABLE abc (
+        "CREATE TABLE {} (
             id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
             vectors JSON NOT NULL
-            );"
+            );", robot_id
     );
     // println!("ddl = {}", ddl);
     let mut stream = sqlx::raw_sql(&sql).execute_many(DATA_SOURCE.get().unwrap());
@@ -138,11 +144,11 @@ pub(crate) async fn create_table(robot_id: &str) -> Result<()> {
     Ok(())
 }
 
-pub(crate) async fn add(robot_id: &str, intent_name: &str, vector: &Vec<f32>) -> Result<i64> {
+pub(crate) async fn add(robot_id: &str, intent_id: &str, vector: &Vec<f32>) -> Result<i64> {
     // check_datasource(robot_id, intent_id).await?;
-    let sql = format!("INSERT INTO {} (intent_name,vectors)VALUES(?)", robot_id);
+    let sql = format!("INSERT INTO {} (intent_id,vectors)VALUES(?)", robot_id);
     let last_insert_rowid = sqlx::query::<Sqlite>(&sql)
-        .bind(intent_name)
+    .bind(intent_id)
         .bind(serde_json::to_string(vector)?)
         .execute(DATA_SOURCE.get().unwrap())
         .await?
@@ -161,9 +167,18 @@ pub(crate) async fn remove(robot_id: &str, id: i64) -> Result<()> {
 }
 
 pub(crate) async fn remove_by_intent_id(robot_id: &str, intent_id: &str) -> Result<()> {
+    let sql = format!("DELETE FROM {} WHERE intent_id=?", robot_id);
+    sqlx::query::<Sqlite>(&sql)
+        .bind(intent_id)
+        .execute(DATA_SOURCE.get().unwrap())
+        .await?;
     Ok(())
 }
 
 pub(crate) async fn remove_table(robot_id: &str) -> Result<()> {
+    let sql = format!("DROP TABLE {}", robot_id);
+    sqlx::query::<Sqlite>(&sql)
+        .execute(DATA_SOURCE.get().unwrap())
+        .await?;
     Ok(())
 }
