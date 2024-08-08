@@ -46,8 +46,11 @@ fn get_idx_db() -> Result<Database> {
 
 async fn create_idx_db(robot_id: &str) -> Result<()> {
     let config = SourceConfig::new(robot_id, "id", "vectors").with_metadata(vec!["intent_id"]);
-    let params = ParamsIVFPQ::default();
-    let algorithm = IndexAlgorithm::IVFPQ(params);
+    // let params = ParamsIVFPQ::default();
+    // let algorithm = IndexAlgorithm::IVFPQ(params);
+    let mut params = ParamsFlat::default();
+    params.metric = oasysdb::types::distance::DistanceMetric::Cosine;
+    let algorithm = IndexAlgorithm::Flat(params);
     get_idx_db()?
         .async_create_index(robot_id, algorithm, config)
         .await?;
@@ -104,7 +107,7 @@ pub(crate) async fn init_datasource() -> Result<()> {
         .acquire_timeout(Duration::from_secs(5))
         .test_before_acquire(true);
     let conn_str = get_sqlite_url()?;
-    log::info!("Embedding database path: {}", &conn_str);
+    // log::info!("Embedding database path: {}", &conn_str);
     let pool = pool_ops.connect(conn_str.as_str()).await?;
     DATA_SOURCE
         .set(pool)

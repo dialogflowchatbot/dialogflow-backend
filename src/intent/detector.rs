@@ -5,17 +5,19 @@ use crate::result::{Error, Result};
 pub(crate) async fn detect(robot_id: &str, s: &str) -> Result<Option<String>> {
     // let now = std::time::Instant::now();
     let embedding = embedding(robot_id, s).await?;
+    // log::info!("Generate embedding cost {:?}", now.elapsed());
     // let s = format!("{:?}", &embedding);
     // let regex = regex::Regex::new(r"\s").unwrap();
     // log::info!("detect embedding {}", regex.replace_all(&s, ""));
+    // let now = std::time::Instant::now();
     let search_vector: Vec<f32> = embedding.0.into();
     let similarity_threshold = embedding.1;
     let result = embedding_db::search_idx_db(robot_id, search_vector.into())?;
-    // println!("inner intent detect {:?}", now.elapsed());
-    if result.len() == 0 {
+    // log::info!("Searching vector took {:?}", now.elapsed());
+    if !result.is_empty() {
         if let Some(record) = result.get(0) {
             log::info!("Record distance: {}", record.distance);
-            if similarity_threshold >= record.distance {
+            if (1f32 - record.distance) >= similarity_threshold {
                 if let Some(data) = record.data.get("intent_id") {
                     if let Some(metadata) = data {
                         if let oasysdb::types::record::DataValue::String(s) = metadata {

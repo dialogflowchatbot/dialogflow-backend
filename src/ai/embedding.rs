@@ -202,10 +202,10 @@ async fn ollama(
             }
         }
     }
-    log::info!(
-        "Ollama embedding result {:?} {:?}",
-        embedding_result.get(0),
-        embedding_result.get(1)
-    );
+    // log::info!(
+    //     "Ollama embedding result {:?} {:?}",
+    //     embedding_result.get(0),
+    //     embedding_result.get(1)
+    // );
     Ok(embedding_result)
 }
