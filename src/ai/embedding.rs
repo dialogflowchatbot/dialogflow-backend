@@ -34,6 +34,7 @@ pub(crate) async fn embedding(robot_id: &str, s: &str) -> Result<(Vec<f32>, f32)
                     &settings.sentence_embedding_provider.api_key,
                     settings.sentence_embedding_provider.connect_timeout_millis,
                     settings.sentence_embedding_provider.read_timeout_millis,
+                    &settings.sentence_embedding_provider.proxy_url,
                 )
                 .await
             }
@@ -44,6 +45,7 @@ pub(crate) async fn embedding(robot_id: &str, s: &str) -> Result<(Vec<f32>, f32)
                     s,
                     settings.sentence_embedding_provider.connect_timeout_millis,
                     settings.sentence_embedding_provider.read_timeout_millis,
+                    &settings.sentence_embedding_provider.proxy_url,
                 )
                 .await
             }
@@ -115,13 +117,20 @@ async fn open_ai(
     m: &str,
     s: &str,
     api_key: &str,
-    connect_timeout_millis: u16,
-    read_timeout_millis: u16,
+    connect_timeout_millis: u32,
+    read_timeout_millis: u32,
+    proxy_url: &str,
 ) -> Result<Vec<f32>> {
-    let client = reqwest::Client::builder()
+    let mut client = reqwest::Client::builder()
         .connect_timeout(Duration::from_millis(connect_timeout_millis.into()))
-        .read_timeout(Duration::from_millis(read_timeout_millis.into()))
-        .build()?;
+        .read_timeout(Duration::from_millis(read_timeout_millis.into()));
+    if proxy_url.is_empty() {
+        client = client.no_proxy();
+    } else {
+        let proxy = reqwest::Proxy::http(proxy_url)?;
+        client = client.proxy(proxy);
+    }
+    let client = client.build()?;
     let mut map = Map::new();
     map.insert(String::from("input"), Value::String(String::from(s)));
     map.insert(String::from("model"), Value::String(String::from(m)));
@@ -161,15 +170,20 @@ async fn ollama(
     u: &str,
     m: &str,
     s: &str,
-    connect_timeout_millis: u16,
-    read_timeout_millis: u16,
+    connect_timeout_millis: u32,
+    read_timeout_millis: u32,
+    proxy_url: &str,
 ) -> Result<Vec<f32>> {
-    let client = reqwest::Client::builder()
+    let mut client = reqwest::Client::builder()
         .connect_timeout(Duration::from_millis(connect_timeout_millis.into()))
-        .read_timeout(Duration::from_millis(read_timeout_millis.into()))
-        .no_proxy()
-        .connection_verbose(false)
-        .build()?;
+        .read_timeout(Duration::from_millis(read_timeout_millis.into()));
+    if proxy_url.is_empty() {
+        client = client.no_proxy();
+    } else {
+        let proxy = reqwest::Proxy::http(proxy_url)?;
+        client = client.proxy(proxy);
+    }
+    let client = client.build()?;
     let mut map = Map::new();
     map.insert(String::from("prompt"), Value::String(String::from(s)));
     map.insert(String::from("model"), Value::String(String::from(m)));

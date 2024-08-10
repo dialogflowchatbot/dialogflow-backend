@@ -4,8 +4,8 @@ use candle_transformers::models::gemma::Model as GemmaModel;
 // use crossbeam_channel::Sender;
 use frand::Rand;
 use tokenizers::Tokenizer;
-use tokio::sync::mpsc::Sender;
 
+use super::chat::ResultReceiver;
 use crate::result::{Error, Result};
 
 // static TEXT_GENERATION_MODEL: OnceLock<Mutex<HashMap<String, (GemmaModel, Tokenizer)>>> =
@@ -29,7 +29,7 @@ pub(super) fn gen_text(
     prompt: &str,
     sample_len: usize,
     top_p: Option<f64>,
-    sender: &Sender<String>,
+    result_receiver: &mut ResultReceiver<'_>,
 ) -> Result<()> {
     // let device = device()?;
     // let lock = TEXT_GENERATION_MODEL.get_or_init(|| Mutex::new(HashMap::with_capacity(32)));
@@ -58,6 +58,7 @@ pub(super) fn gen_text(
     let mut generated_tokens = 0usize;
     let start_gen = std::time::Instant::now();
     let mut model = model.clone();
+    // let rr = Rc::new(result_receiver);
     for index in 0..sample_len {
         let context_size = if index > 0 { 1 } else { tokens.len() };
         let start_pos = tokens.len().saturating_sub(context_size);
@@ -90,26 +91,42 @@ pub(super) fn gen_text(
         if next_token == eos_token {
             break;
         }
+        // let rr: ResultReceiver;
         if let Some(t) = tokenizer.next_token(next_token)? {
             // print!("{t}");
             // std::io::stdout().flush()?;
-            if let Err(e) = sender.try_send(t) {
-                log::warn!(
-                    "Sent failed, maybe receiver dropped or queue was full, err: {:?}",
-                    &e
-                );
-                break;
+            // let result_receiver = rr.clone();
+            match result_receiver {
+                ResultReceiver::SseSender(sender) => {
+                    if let Err(e) = sender.try_send(t) {
+                        log::warn!(
+                            "Sent failed, maybe receiver dropped or queue was full, err: {:?}",
+                            &e
+                        );
+                        break;
+                    }
+                    // ResultReceiver::SseSender(sender)
+                }
+                ResultReceiver::StrBuf(sb) => {
+                    sb.push_str(&t);
+                    // ResultReceiver::StrBuf(sb)
+                }
             }
         }
     }
     let dt = start_gen.elapsed();
     if let Some(rest) = tokenizer.decode_rest()? {
         // print!("{rest}");
-        if let Err(e) = sender.try_send(rest) {
-            log::warn!(
-                "Sent failed, maybe receiver dropped or queue was full, err: {:?}",
-                &e
-            );
+        match result_receiver {
+            ResultReceiver::SseSender(sender) => {
+                if let Err(e) = sender.try_send(rest) {
+                    log::warn!(
+                        "Sent failed, maybe receiver dropped or queue was full, err: {:?}",
+                        &e
+                    );
+                }
+            }
+            ResultReceiver::StrBuf(sb) => sb.push_str(&rest),
         }
     }
     // std::io::stdout().flush()?;

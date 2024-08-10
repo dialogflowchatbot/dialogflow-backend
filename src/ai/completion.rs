@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use tokio::sync::mpsc::Sender;
 
+use super::chat::ResultReceiver;
 use crate::ai::huggingface::{HuggingFaceModel, LoadedHuggingFaceModel};
 use crate::man::settings;
 use crate::result::{Error, Result};
@@ -78,6 +79,7 @@ pub(crate) async fn completion(
                     prompt,
                     settings.text_generation_provider.connect_timeout_millis,
                     settings.text_generation_provider.read_timeout_millis,
+                    &settings.text_generation_provider.proxy_url,
                     sender,
                 )
                 .await?;
@@ -90,6 +92,7 @@ pub(crate) async fn completion(
                     prompt,
                     settings.text_generation_provider.connect_timeout_millis,
                     settings.text_generation_provider.read_timeout_millis,
+                    &settings.text_generation_provider.proxy_url,
                     settings.text_generation_provider.max_response_token_length,
                     sender,
                 )
@@ -191,10 +194,17 @@ async fn huggingface(
         model.insert(String::from(robot_id), r);
     };
     let loaded_model = model.get(robot_id).unwrap();
+    let mut result_receiver = ResultReceiver::SseSender(sender);
     match loaded_model {
-        LoadedHuggingFaceModel::Gemma(m) => {
-            super::gemma::gen_text(&m.0, &m.1, &m.2, prompt, sample_len, Some(0.5), sender)
-        }
+        LoadedHuggingFaceModel::Gemma(m) => super::gemma::gen_text(
+            &m.0,
+            &m.1,
+            &m.2,
+            prompt,
+            sample_len,
+            Some(0.5),
+            &mut result_receiver,
+        ),
         LoadedHuggingFaceModel::Llama(m) => super::llama::gen_text(
             &m.0,
             &m.1,
@@ -205,11 +215,17 @@ async fn huggingface(
             sample_len,
             Some(25),
             Some(0.5),
-            sender,
+            &mut result_receiver,
         ),
-        LoadedHuggingFaceModel::Phi3(m) => {
-            super::phi3::gen_text(&m.0, &m.1, &m.2, prompt, sample_len, Some(0.5), sender)
-        }
+        LoadedHuggingFaceModel::Phi3(m) => super::phi3::gen_text(
+            &m.0,
+            &m.1,
+            &m.2,
+            prompt,
+            sample_len,
+            Some(0.5),
+            &mut result_receiver,
+        ),
         LoadedHuggingFaceModel::Bert(_m) => Err(Error::ErrorWithMessage(format!(
             "Unsuported model type {:?}.",
             &info.model_type
@@ -221,14 +237,21 @@ async fn huggingface(
 async fn open_ai(
     m: &str,
     s: &str,
-    connect_timeout_millis: u16,
-    read_timeout_millis: u16,
+    connect_timeout_millis: u32,
+    read_timeout_millis: u32,
+    proxy_url: &str,
     sender: &Sender<String>,
 ) -> Result<()> {
-    let client = reqwest::Client::builder()
+    let mut client = reqwest::Client::builder()
         .connect_timeout(Duration::from_millis(connect_timeout_millis.into()))
-        .read_timeout(Duration::from_millis(read_timeout_millis.into()))
-        .build()?;
+        .read_timeout(Duration::from_millis(read_timeout_millis.into()));
+    if proxy_url.is_empty() {
+        client = client.no_proxy();
+    } else {
+        let proxy = reqwest::Proxy::http(proxy_url)?;
+        client = client.proxy(proxy);
+    }
+    let client = client.build()?;
     let mut message0 = Map::new();
     message0.insert(String::from("role"), Value::from("system"));
     message0.insert(String::from("content"), Value::from("system_hint"));
@@ -279,8 +302,9 @@ async fn ollama(
     u: &str,
     m: &str,
     s: &str,
-    connect_timeout_millis: u16,
-    read_timeout_millis: u16,
+    connect_timeout_millis: u32,
+    read_timeout_millis: u32,
+    proxy_url: &str,
     sample_len: u32,
     sender: &Sender<String>,
 ) -> Result<()> {
@@ -295,10 +319,16 @@ async fn ollama(
     if prompt.is_empty() {
         return Ok(());
     }
-    let client = reqwest::Client::builder()
+    let mut client = reqwest::Client::builder()
         .connect_timeout(Duration::from_millis(connect_timeout_millis.into()))
-        .read_timeout(Duration::from_millis(read_timeout_millis.into()))
-        .build()?;
+        .read_timeout(Duration::from_millis(read_timeout_millis.into()));
+    if proxy_url.is_empty() {
+        client = client.no_proxy();
+    } else {
+        let proxy = reqwest::Proxy::http(proxy_url)?;
+        client = client.proxy(proxy);
+    }
+    let client = client.build()?;
     let mut map = Map::new();
     map.insert(String::from("prompt"), Value::String(prompt));
     map.insert(String::from("model"), Value::String(String::from(m)));
@@ -310,7 +340,7 @@ async fn ollama(
     map.insert(String::from("options"), Value::from(num_predict));
     let obj = Value::Object(map);
     let body = serde_json::to_string(&obj)?;
-    log::info!("Request Ollama body {}", &body);
+    // log::info!("Request Ollama body {} to {}", &body, u);
     let req = client.post(u).body(body);
     let mut stream = req.send().await?.bytes_stream();
     while let Some(item) = stream.next().await {

@@ -358,6 +358,31 @@ impl RuntimeNode for SendEmailNode {
     }
 }
 
+#[derive(Archive, Deserialize, Serialize)]
+#[archive(compare(PartialEq), check_bytes)]
+enum LlmChatNodeExitCondition {
+    Intent(String),
+    SpecialInputs(String),
+    MaxChatTimes(u32),
+}
+
+#[derive(Archive, Deserialize, Serialize)]
+#[archive(compare(PartialEq), check_bytes)]
+pub(crate) struct LlmChatNode {
+    pub(super) prompt: String,
+    pub(super) context_len: u8,
+    pub(super) exit_condition: LlmChatNodeExitCondition,
+    pub(super) next_node_id: String,
+}
+
+impl RuntimeNode for LlmChatNode {
+    fn exec(&self, req: &Request, ctx: &mut Context, _response: &mut Response) -> bool {
+        // println!("Into LlmChatNode");
+        // crate::ai::chat::chat(robot_id, prompt, sender)
+        false
+    }
+}
+
 pub(crate) fn deser_node(bytes: &[u8]) -> Result<RuntimeNnodeEnum> {
     let mut vec = rkyv::AlignedVec::new();
     vec.extend_from_slice(bytes);

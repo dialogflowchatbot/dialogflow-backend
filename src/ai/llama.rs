@@ -4,8 +4,8 @@ use candle_transformers::models::llama::{Cache, Llama};
 // use crossbeam_channel::Sender;
 use frand::Rand;
 use tokenizers::Tokenizer;
-use tokio::sync::mpsc::Sender;
 
+use super::chat::ResultReceiver;
 use crate::result::{Error, Result};
 
 // static TEXT_GENERATION_MODEL: OnceLock<
@@ -33,7 +33,7 @@ pub(super) fn gen_text(
     sample_len: usize,
     top_k: Option<usize>,
     top_p: Option<f64>,
-    sender: &Sender<String>,
+    result_receiver: &mut ResultReceiver<'_>,
 ) -> Result<()> {
     // let device = device()?;
     // let lock = TEXT_GENERATION_MODEL.get_or_init(|| Mutex::new(HashMap::with_capacity(32)));
@@ -135,14 +135,30 @@ pub(super) fn gen_text(
             //     break;
             // }
             // log::info!("{}", &t);
-            if sender.is_closed() {
-                break;
+            match result_receiver {
+                ResultReceiver::SseSender(sender) => {
+                    if sender.is_closed() {
+                        break;
+                    }
+                    crate::sse_send!(sender, t);
+                }
+                ResultReceiver::StrBuf(sb) => {
+                    sb.push_str(&t);
+                    // ResultReceiver::StrBuf(sb)
+                }
             }
-            crate::sse_send!(sender, t);
         }
     }
     if let Some(rest) = tokenizer.decode_rest()? {
-        crate::sse_send!(sender, rest);
+        match result_receiver {
+            ResultReceiver::SseSender(sender) => {
+                crate::sse_send!(sender, rest);
+            }
+            ResultReceiver::StrBuf(sb) => {
+                sb.push_str(&rest);
+                // ResultReceiver::StrBuf(sb)
+            }
+        }
     }
     let dt = start_gen.elapsed();
     log::info!(

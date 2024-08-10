@@ -107,11 +107,13 @@ pub(crate) struct ChatProvider {
     pub(crate) api_key: String,
     pub(crate) model: String,
     #[serde(rename = "connectTimeoutMillis")]
-    pub(crate) connect_timeout_millis: u16,
+    pub(crate) connect_timeout_millis: u32,
     #[serde(rename = "readTimeoutMillis")]
-    pub(crate) read_timeout_millis: u16,
+    pub(crate) read_timeout_millis: u32,
     #[serde(rename = "maxResponseTokenLength")]
     pub(crate) max_response_token_length: u32,
+    #[serde(rename = "proxyUrl")]
+    pub(crate) proxy_url: String,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -123,11 +125,13 @@ pub(crate) struct TextGenerationProvider {
     pub(crate) api_key: String,
     pub(crate) model: String,
     #[serde(rename = "connectTimeoutMillis")]
-    pub(crate) connect_timeout_millis: u16,
+    pub(crate) connect_timeout_millis: u32,
     #[serde(rename = "readTimeoutMillis")]
-    pub(crate) read_timeout_millis: u16,
+    pub(crate) read_timeout_millis: u32,
     #[serde(rename = "maxResponseTokenLength")]
     pub(crate) max_response_token_length: u32,
+    #[serde(rename = "proxyUrl")]
+    pub(crate) proxy_url: String,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -141,9 +145,11 @@ pub(crate) struct SentenceEmbeddingProvider {
     pub(crate) api_key: String,
     pub(crate) model: String,
     #[serde(rename = "connectTimeoutMillis")]
-    pub(crate) connect_timeout_millis: u16,
+    pub(crate) connect_timeout_millis: u32,
     #[serde(rename = "readTimeoutMillis")]
-    pub(crate) read_timeout_millis: u16,
+    pub(crate) read_timeout_millis: u32,
+    #[serde(rename = "proxyUrl")]
+    pub(crate) proxy_url: String,
 }
 
 impl Default for GlobalSettings {
@@ -172,9 +178,10 @@ impl Default for Settings {
                 api_url: String::new(),
                 api_key: String::new(),
                 model: String::new(),
-                connect_timeout_millis: 2000,
+                connect_timeout_millis: 5000,
                 read_timeout_millis: 10000,
                 max_response_token_length: 10,
+                proxy_url: String::new(),
             },
             text_generation_provider: TextGenerationProvider {
                 provider: completion::TextGenerationProvider::HuggingFace(
@@ -183,9 +190,10 @@ impl Default for Settings {
                 api_url: String::new(),
                 api_key: String::new(),
                 model: String::new(),
-                connect_timeout_millis: 2000,
+                connect_timeout_millis: 5000,
                 read_timeout_millis: 10000,
                 max_response_token_length: 10,
+                proxy_url: String::new(),
             },
             sentence_embedding_provider: SentenceEmbeddingProvider {
                 provider: embedding::SentenceEmbeddingProvider::HuggingFace(
@@ -195,8 +203,9 @@ impl Default for Settings {
                 api_url: String::new(),
                 api_key: String::new(),
                 model: String::new(),
-                connect_timeout_millis: 2000,
+                connect_timeout_millis: 5000,
                 read_timeout_millis: 10000,
+                proxy_url: String::new(),
             },
             smtp_host: String::new(),
             smtp_username: String::new(),
@@ -281,8 +290,22 @@ pub(crate) fn save_settings(robot_id: &str, data: Settings) -> Result<()> {
     if let completion::TextGenerationProvider::HuggingFace(m) =
         &data.text_generation_provider.provider
     {
+        if let Err(e) = crate::ai::chat::replace_model_cache(robot_id, &m) {
+            log::warn!(
+                "Hugging face model files for chat were incorrect. Err: {:?}",
+                &e
+            );
+        }
+    }
+
+    if let completion::TextGenerationProvider::HuggingFace(m) =
+        &data.text_generation_provider.provider
+    {
         if let Err(e) = completion::replace_model_cache(robot_id, &m) {
-            log::warn!("Hugging face model files incorrect. Err: {:?}", &e);
+            log::warn!(
+                "Hugging face model files for completion were incorrect. Err: {:?}",
+                &e
+            );
         }
     }
 
@@ -292,7 +315,10 @@ pub(crate) fn save_settings(robot_id: &str, data: Settings) -> Result<()> {
         match crate::ai::huggingface::load_bert_model_files(&m.get_info().repository) {
             Ok(m) => embedding::replace_model_cache(robot_id, m),
             Err(e) => {
-                log::warn!("Hugging face model files incorrect. Err: {:?}", &e);
+                log::warn!(
+                    "Hugging face model files for sentence embedding were incorrect. Err: {:?}",
+                    &e
+                );
             }
         }
     }

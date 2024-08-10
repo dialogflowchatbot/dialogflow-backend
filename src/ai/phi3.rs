@@ -3,8 +3,8 @@ use candle_transformers::generation::LogitsProcessor;
 use candle_transformers::models::phi3::Model;
 use frand::Rand;
 use tokenizers::Tokenizer;
-use tokio::sync::mpsc::Sender;
 
+use super::chat::ResultReceiver;
 use crate::result::{Error, Result};
 
 // static TEXT_GENERATION_MODEL: OnceLock<Mutex<HashMap<String, (Model, Tokenizer)>>> =
@@ -28,7 +28,7 @@ pub(super) fn gen_text(
     prompt: &str,
     sample_len: usize,
     top_p: Option<f64>,
-    sender: &Sender<String>,
+    result_receiver: &mut ResultReceiver<'_>,
 ) -> Result<()> {
     // let device = device()?;
     // let lock = TEXT_GENERATION_MODEL.get_or_init(|| Mutex::new(HashMap::with_capacity(32)));
@@ -97,12 +97,28 @@ pub(super) fn gen_text(
         generated_tokens += 1;
         if next_token == eos_token {
             if let Some(t) = tokenizer.decode_rest()? {
-                crate::sse_send!(sender, t);
+                match result_receiver {
+                    ResultReceiver::SseSender(sender) => {
+                        crate::sse_send!(sender, t);
+                    }
+                    ResultReceiver::StrBuf(sb) => {
+                        sb.push_str(&t);
+                        // ResultReceiver::StrBuf(sb)
+                    }
+                }
             }
             break;
         }
         if let Some(t) = tokenizer.next_token(next_token)? {
-            crate::sse_send!(sender, t);
+            match result_receiver {
+                ResultReceiver::SseSender(sender) => {
+                    crate::sse_send!(sender, t);
+                }
+                ResultReceiver::StrBuf(sb) => {
+                    sb.push_str(&t);
+                    // ResultReceiver::StrBuf(sb)
+                }
+            }
             // std::io::stdout().flush()?;
         }
         pos += context_size;

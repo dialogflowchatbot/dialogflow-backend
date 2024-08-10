@@ -14,6 +14,11 @@ use crate::result::{Error, Result};
 static LOADED_MODELS: LazyLock<Mutex<HashMap<String, LoadedHuggingFaceModel>>> =
     LazyLock::new(|| Mutex::new(HashMap::with_capacity(32)));
 
+pub(crate) enum ResultReceiver<'r> {
+    SseSender(&'r Sender<String>),
+    StrBuf(&'r mut String),
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "id", content = "model")]
 pub(crate) enum ChatProvider {
@@ -29,7 +34,11 @@ pub(crate) fn replace_model_cache(robot_id: &str, m: &HuggingFaceModel) -> Resul
     Ok(())
 }
 
-pub(crate) async fn chat(robot_id: &str, prompt: &str, sender: &Sender<String>) -> Result<()> {
+pub(crate) async fn chat(
+    robot_id: &str,
+    prompt: &str,
+    result_receiver: ResultReceiver<'_>,
+) -> Result<()> {
     if let Some(settings) = settings::get_settings(robot_id)? {
         // log::info!("{:?}", &settings.chat_provider.provider);
         match settings.chat_provider.provider {
@@ -39,7 +48,7 @@ pub(crate) async fn chat(robot_id: &str, prompt: &str, sender: &Sender<String>) 
                     &m,
                     prompt,
                     settings.chat_provider.max_response_token_length as usize,
-                    sender,
+                    result_receiver,
                 )
                 .await?;
                 Ok(())
@@ -50,7 +59,8 @@ pub(crate) async fn chat(robot_id: &str, prompt: &str, sender: &Sender<String>) 
                     prompt,
                     settings.text_generation_provider.connect_timeout_millis,
                     settings.text_generation_provider.read_timeout_millis,
-                    sender,
+                    &settings.text_generation_provider.proxy_url,
+                    result_receiver,
                 )
                 .await?;
                 Ok(())
@@ -62,8 +72,9 @@ pub(crate) async fn chat(robot_id: &str, prompt: &str, sender: &Sender<String>) 
                     prompt,
                     settings.text_generation_provider.connect_timeout_millis,
                     settings.text_generation_provider.read_timeout_millis,
+                    &settings.text_generation_provider.proxy_url,
                     settings.text_generation_provider.max_response_token_length,
-                    sender,
+                    result_receiver,
                 )
                 .await?;
                 Ok(())
@@ -81,7 +92,7 @@ async fn huggingface(
     m: &HuggingFaceModel,
     prompt: &str,
     sample_len: usize,
-    sender: &Sender<String>,
+    mut result_receiver: ResultReceiver<'_>,
 ) -> Result<()> {
     let info = m.get_info();
     // log::info!("model_type={:?}", &info.model_type);
@@ -96,9 +107,15 @@ async fn huggingface(
     };
     let loaded_model = model.get(robot_id).unwrap();
     match loaded_model {
-        LoadedHuggingFaceModel::Gemma(m) => {
-            super::gemma::gen_text(&m.0, &m.1, &m.2, prompt, sample_len, Some(0.5), sender)
-        }
+        LoadedHuggingFaceModel::Gemma(m) => super::gemma::gen_text(
+            &m.0,
+            &m.1,
+            &m.2,
+            prompt,
+            sample_len,
+            Some(0.5),
+            &mut result_receiver,
+        ),
         LoadedHuggingFaceModel::Llama(m) => super::llama::gen_text(
             &m.0,
             &m.1,
@@ -109,11 +126,17 @@ async fn huggingface(
             sample_len,
             Some(25),
             Some(0.5),
-            sender,
+            &mut result_receiver,
         ),
-        LoadedHuggingFaceModel::Phi3(m) => {
-            super::phi3::gen_text(&m.0, &m.1, &m.2, prompt, sample_len, Some(0.5), sender)
-        }
+        LoadedHuggingFaceModel::Phi3(m) => super::phi3::gen_text(
+            &m.0,
+            &m.1,
+            &m.2,
+            prompt,
+            sample_len,
+            Some(0.5),
+            &mut result_receiver,
+        ),
         LoadedHuggingFaceModel::Bert(_m) => Err(Error::ErrorWithMessage(format!(
             "Unsuported model type {:?}.",
             &info.model_type
@@ -125,14 +148,21 @@ async fn huggingface(
 async fn open_ai(
     m: &str,
     s: &str,
-    connect_timeout_millis: u16,
-    read_timeout_millis: u16,
-    sender: &Sender<String>,
+    connect_timeout_millis: u32,
+    read_timeout_millis: u32,
+    proxy_url: &str,
+    result_receiver: ResultReceiver<'_>,
 ) -> Result<()> {
-    let client = reqwest::Client::builder()
+    let mut client = reqwest::Client::builder()
         .connect_timeout(Duration::from_millis(connect_timeout_millis.into()))
-        .read_timeout(Duration::from_millis(read_timeout_millis.into()))
-        .build()?;
+        .read_timeout(Duration::from_millis(read_timeout_millis.into()));
+    if proxy_url.is_empty() {
+        client = client.no_proxy();
+    } else {
+        let proxy = reqwest::Proxy::http(proxy_url)?;
+        client = client.proxy(proxy);
+    }
+    let client = client.build()?;
     let mut message0 = Map::new();
     message0.insert(String::from("role"), Value::from("system"));
     message0.insert(String::from("content"), Value::from("system_hint"));
@@ -143,29 +173,61 @@ async fn open_ai(
     let mut map = Map::new();
     map.insert(String::from("model"), Value::from(m));
     map.insert(String::from("messages"), messages);
-    map.insert(String::from("stream"), Value::Bool(true));
+    let stream = match result_receiver {
+        ResultReceiver::SseSender(_) => true,
+        ResultReceiver::StrBuf(_) => false,
+    };
+    map.insert(String::from("stream"), Value::Bool(stream));
     let obj = Value::Object(map);
     let req = client
         .post("https://api.openai.com/v1/chat/completions")
         .header("Content-Type", "application/json")
         .header("Authorization", "Bearer ")
         .body(serde_json::to_string(&obj)?);
-    let mut stream = req.send().await?.bytes_stream();
-    while let Some(item) = stream.next().await {
-        let chunk = item?;
-        let v: Value = serde_json::from_slice(chunk.as_ref())?;
-        if let Some(choices) = v.get("choices") {
-            if choices.is_array() {
-                if let Some(choices) = choices.as_array() {
-                    if !choices.is_empty() {
-                        if let Some(item) = choices.get(0) {
-                            if let Some(delta) = item.get("delta") {
-                                if let Some(content) = delta.get("content") {
-                                    if content.is_string() {
-                                        if let Some(s) = content.as_str() {
-                                            let m = String::from(s);
-                                            log::info!("OpenAI push {}", &m);
-                                            crate::sse_send!(sender, m);
+    let res = req.send().await?;
+    match result_receiver {
+        ResultReceiver::SseSender(sender) => {
+            let mut stream = res.bytes_stream();
+            while let Some(item) = stream.next().await {
+                let chunk = item?;
+                let v: Value = serde_json::from_slice(chunk.as_ref())?;
+                if let Some(choices) = v.get("choices") {
+                    if choices.is_array() {
+                        if let Some(choices) = choices.as_array() {
+                            if !choices.is_empty() {
+                                if let Some(item) = choices.get(0) {
+                                    if let Some(delta) = item.get("delta") {
+                                        if let Some(content) = delta.get("content") {
+                                            if content.is_string() {
+                                                if let Some(s) = content.as_str() {
+                                                    let m = String::from(s);
+                                                    log::info!("OpenAI push {}", &m);
+                                                    crate::sse_send!(sender, m);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        ResultReceiver::StrBuf(sb) => {
+            let v: Value = serde_json::from_slice(res.text().await?.as_ref())?;
+            if let Some(choices) = v.get("choices") {
+                if choices.is_array() {
+                    if let Some(choices) = choices.as_array() {
+                        if !choices.is_empty() {
+                            if let Some(item) = choices.get(0) {
+                                if let Some(message) = item.get("message") {
+                                    if let Some(content) = message.get("content") {
+                                        if content.is_string() {
+                                            if let Some(s) = content.as_str() {
+                                                log::info!("OpenAI push {}", s);
+                                                sb.push_str(s);
+                                            }
                                         }
                                     }
                                 }
@@ -183,10 +245,11 @@ async fn ollama(
     u: &str,
     m: &str,
     s: &str,
-    connect_timeout_millis: u16,
-    read_timeout_millis: u16,
+    connect_timeout_millis: u32,
+    read_timeout_millis: u32,
+    proxy_url: &str,
     sample_len: u32,
-    sender: &Sender<String>,
+    result_receiver: ResultReceiver<'_>,
 ) -> Result<()> {
     let prompts: Vec<super::completion::Prompt> = serde_json::from_str(s)?;
     let mut prompt = String::with_capacity(32);
@@ -199,14 +262,24 @@ async fn ollama(
     if prompt.is_empty() {
         return Ok(());
     }
-    let client = reqwest::Client::builder()
+    let mut client = reqwest::Client::builder()
         .connect_timeout(Duration::from_millis(connect_timeout_millis.into()))
-        .read_timeout(Duration::from_millis(read_timeout_millis.into()))
-        .build()?;
+        .read_timeout(Duration::from_millis(read_timeout_millis.into()));
+    if proxy_url.is_empty() {
+        client = client.no_proxy();
+    } else {
+        let proxy = reqwest::Proxy::http(proxy_url)?;
+        client = client.proxy(proxy);
+    }
+    let client = client.build()?;
     let mut map = Map::new();
     map.insert(String::from("prompt"), Value::String(prompt));
     map.insert(String::from("model"), Value::String(String::from(m)));
-    map.insert(String::from("stream"), Value::Bool(true));
+    let stream = match result_receiver {
+        ResultReceiver::SseSender(_) => true,
+        ResultReceiver::StrBuf(_) => false,
+    };
+    map.insert(String::from("stream"), Value::Bool(stream));
 
     let mut num_predict = Map::new();
     num_predict.insert(String::from("num_predict"), Value::from(sample_len));
@@ -216,16 +289,32 @@ async fn ollama(
     let body = serde_json::to_string(&obj)?;
     log::info!("Request Ollama body {}", &body);
     let req = client.post(u).body(body);
-    let mut stream = req.send().await?.bytes_stream();
-    while let Some(item) = stream.next().await {
-        let chunk = item?;
-        let v: Value = serde_json::from_slice(chunk.as_ref())?;
-        if let Some(res) = v.get("response") {
-            if res.is_string() {
-                if let Some(s) = res.as_str() {
-                    let m = String::from(s);
-                    log::info!("Ollama push {}", &m);
-                    crate::sse_send!(sender, m);
+    let res = req.send().await?;
+    match result_receiver {
+        ResultReceiver::SseSender(sender) => {
+            let mut stream = res.bytes_stream();
+            while let Some(item) = stream.next().await {
+                let chunk = item?;
+                let v: Value = serde_json::from_slice(chunk.as_ref())?;
+                if let Some(res) = v.get("response") {
+                    if res.is_string() {
+                        if let Some(s) = res.as_str() {
+                            let m = String::from(s);
+                            log::info!("Ollama push {}", &m);
+                            crate::sse_send!(sender, m);
+                        }
+                    }
+                }
+            }
+        }
+        ResultReceiver::StrBuf(sb) => {
+            let v: Value = serde_json::from_slice(res.bytes().await?.as_ref())?;
+            if let Some(res) = v.get("response") {
+                if res.is_string() {
+                    if let Some(s) = res.as_str() {
+                        log::info!("Ollama push {}", s);
+                        sb.push_str(s);
+                    }
                 }
             }
         }
