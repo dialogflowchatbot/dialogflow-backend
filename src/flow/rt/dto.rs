@@ -59,6 +59,8 @@ pub(crate) struct Response {
     pub(crate) next_action: NextActionType,
     #[serde(rename = "extraData")]
     pub(crate) extra_data: ExtraData,
+    #[serde(rename = "sseReceiverTicket")]
+    pub(crate) sse_receiver_ticket: String,
 }
 
 impl Response {
@@ -71,6 +73,7 @@ impl Response {
             extra_data: ExtraData {
                 external_link: String::new(),
             },
+            sse_receiver_ticket: String::new(),
         }
     }
 }

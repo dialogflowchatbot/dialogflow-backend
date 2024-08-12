@@ -12,7 +12,7 @@ use dialogflow::web::server::start_app;
 
 fn main() {
     // dialogflow::web::t1();
-    env::set_var("RUST_LOG", "TRACE");
+    env::set_var("RUST_LOG", "INFO");
     let mut builder = LoggerBuilder::from_default_env();
     builder
         .target(Target::Stdout)

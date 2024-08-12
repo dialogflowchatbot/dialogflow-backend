@@ -180,7 +180,7 @@ impl Default for Settings {
                 model: String::new(),
                 connect_timeout_millis: 5000,
                 read_timeout_millis: 10000,
-                max_response_token_length: 10,
+                max_response_token_length: 1000,
                 proxy_url: String::new(),
             },
             text_generation_provider: TextGenerationProvider {
@@ -192,7 +192,7 @@ impl Default for Settings {
                 model: String::new(),
                 connect_timeout_millis: 5000,
                 read_timeout_millis: 10000,
-                max_response_token_length: 10,
+                max_response_token_length: 1000,
                 proxy_url: String::new(),
             },
             sentence_embedding_provider: SentenceEmbeddingProvider {

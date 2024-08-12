@@ -232,6 +232,7 @@ fn gen_router() -> Router {
         )
         .route("/management/settings/smtp/test", post(settings::smtp_test))
         .route("/flow/answer", post(rt::answer))
+        .route("/flow/answer/sse", post(rt::answer_sse))
         .route("/ai/text/generation", post(ai::gen_text))
         .route("/version.json", get(version))
         .route("/check-new-version.json", get(check_new_version))

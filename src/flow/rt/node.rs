@@ -7,6 +7,7 @@ use rkyv::{Archive, Deserialize, Serialize};
 use super::condition::ConditionData;
 use super::context::Context;
 use super::dto::{AnswerData, AnswerType, CollectData, Request, Response};
+use crate::ai::chat::ResultReceiver;
 use crate::external::http::client as http;
 use crate::flow::rt::collector;
 use crate::flow::subflow::dto::NextActionType;
@@ -360,7 +361,7 @@ impl RuntimeNode for SendEmailNode {
 
 #[derive(Archive, Deserialize, Serialize)]
 #[archive(compare(PartialEq), check_bytes)]
-enum LlmChatNodeExitCondition {
+pub(crate) enum LlmChatNodeExitCondition {
     Intent(String),
     SpecialInputs(String),
     MaxChatTimes(u32),
@@ -372,14 +373,65 @@ pub(crate) struct LlmChatNode {
     pub(super) prompt: String,
     pub(super) context_len: u8,
     pub(super) exit_condition: LlmChatNodeExitCondition,
+    pub(super) streaming: bool,
     pub(super) next_node_id: String,
 }
 
 impl RuntimeNode for LlmChatNode {
-    fn exec(&self, req: &Request, ctx: &mut Context, _response: &mut Response) -> bool {
+    fn exec(&self, req: &Request, ctx: &mut Context, response: &mut Response) -> bool {
         // println!("Into LlmChatNode");
-        // crate::ai::chat::chat(robot_id, prompt, sender)
-        false
+        match &self.exit_condition {
+            LlmChatNodeExitCondition::Intent(i) => {
+                if req.user_input_intent.is_some() && req.user_input_intent.as_ref().unwrap().eq(i)
+                {
+                    add_next_node(ctx, &self.next_node_id);
+                    return false;
+                }
+            }
+            LlmChatNodeExitCondition::SpecialInputs(s) => {
+                if req.user_input.eq(s) {
+                    add_next_node(ctx, &self.next_node_id);
+                    return false;
+                }
+            }
+            LlmChatNodeExitCondition::MaxChatTimes(t) => todo!(),
+        }
+        if self.streaming {
+            let r = super::facade::get_sender(&req.session_id);
+            if r.is_err() {
+                return false;
+            }
+            let s_op = r.unwrap();
+            if s_op.is_none() {
+                return false;
+            }
+            let s = s_op.unwrap();
+            let ticket = String::new();
+            let robot_id = req.robot_id.clone();
+            let prompt = self.prompt.clone();
+            tokio::task::spawn(async move {
+                if let Err(e) =
+                    crate::ai::chat::chat(&robot_id, &prompt, ResultReceiver::SseSender(&s)).await
+                {
+                    log::info!("LlmChatNode response failed, err: {:?}", &e);
+                }
+            });
+            false
+        } else {
+            let mut s = String::with_capacity(1024);
+            if let Err(e) = tokio::runtime::Handle::current().block_on(async {
+                crate::ai::chat::chat(&req.robot_id, &self.prompt, ResultReceiver::StrBuf(&mut s))
+                    .await
+            }) {
+                log::info!("LlmChatNode response failed, err: {:?}", &e);
+            } else {
+                response.answers.push(AnswerData {
+                    text: s,
+                    answer_type: AnswerType::TextPlain,
+                });
+            }
+            true
+        }
     }
 }
 
