@@ -26,9 +26,9 @@ pub(crate) enum TextGenerationProvider {
 }
 
 #[derive(Deserialize, Serialize)]
-pub(in crate::ai) struct Prompt {
-    pub(in crate::ai) role: String,
-    pub(in crate::ai) content: String,
+pub(crate) struct Prompt {
+    pub(crate) role: String,
+    pub(crate) content: String,
 }
 
 static LOADED_MODELS: LazyLock<Mutex<HashMap<String, LoadedHuggingFaceModel>>> =

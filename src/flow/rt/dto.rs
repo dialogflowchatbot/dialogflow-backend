@@ -35,7 +35,8 @@ pub(crate) struct CollectData {
     pub(crate) value: String,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Deserialize, Serialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
+#[archive(compare(PartialEq), check_bytes)]
 pub(crate) enum AnswerType {
     TextPlain,
     TextHtml,

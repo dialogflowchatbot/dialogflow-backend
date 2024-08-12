@@ -28,6 +28,7 @@ pub(crate) struct Context {
     robot_id: String,
     pub(in crate::flow::rt) main_flow_id: String,
     session_id: String,
+    pub(in crate::flow::rt) node: Option<Vec<u8>>,
     pub(in crate::flow::rt) nodes: LinkedList<String>,
     pub(crate) vars: HashMap<String, VariableValue>,
     #[serde(skip)]
@@ -62,6 +63,7 @@ impl Context {
             robot_id: String::from(robot_id),
             main_flow_id: String::with_capacity(64),
             session_id: String::from(session_id),
+            node: None,
             nodes: LinkedList::new(),
             vars: HashMap::with_capacity(16),
             none_persistent_vars: HashMap::with_capacity(16),
@@ -103,6 +105,17 @@ impl Context {
 
     pub(in crate::flow::rt) fn pop_node(&mut self) -> Option<RuntimeNnodeEnum> {
         // println!("nodes len {}", self.nodes.len());
+        
+        if self.node.is_some() {
+            let node = std::mem::replace(&mut self.node, None);
+            let v = node.unwrap();
+            match crate::flow::rt::node::deser_node(v.as_ref()) {
+                Ok(n) => return Some(n),
+                Err(e) => {
+                    log::error!("pop_node failed err: {:?}", &e);
+                },
+            }
+        }
         if let Some(node_id) = self.nodes.pop_front() {
             // println!("main_flow_id {} node_id {}", &self.main_flow_id, &node_id);
             if let Ok(r) = super::crud::get_runtime_node(&self.main_flow_id, &node_id) {

@@ -56,6 +56,7 @@ pub(crate) struct CanvasCell {
 #[serde(tag = "nodeType")]
 pub(crate) enum Node {
     DialogNode(DialogNode),
+    LlmChatNode(LlmChatNode),
     ConditionNode(ConditionNode),
     CollectNode(CollectNode),
     GotoNode(GotoNode),
@@ -88,6 +89,20 @@ impl Node {
                     Self::err(f, t, &n.node_name, "node name not filled in")
                 } else if n.dialog_text.is_empty() {
                     Self::err(f, t, &n.node_name, "No dialog text filled in")
+                } else if n.branches.len() != 1 {
+                    Self::err(f, t, &n.node_name, "Branch information is incorrect")
+                } else {
+                    Ok(())
+                }
+            }
+            Node::LlmChatNode(n) => {
+                let t = "Dialog";
+                if !n.valid {
+                    Self::err(f, t, &n.node_name, "verification failed")
+                } else if n.node_name.is_empty() {
+                    Self::err(f, t, &n.node_name, "node name not filled in")
+                } else if n.prompt.is_empty() {
+                    Self::err(f, t, &n.node_name, "No prompt filled in")
                 } else if n.branches.len() != 1 {
                     Self::err(f, t, &n.node_name, "Branch information is incorrect")
                 } else {
@@ -205,6 +220,7 @@ impl Node {
     pub(crate) fn get_node_id(&self) -> String {
         match self {
             Self::DialogNode(n) => n.node_id.clone(),
+            Self::LlmChatNode(n) => n.node_id.clone(),
             Self::ConditionNode(n) => n.node_id.clone(),
             Self::CollectNode(n) => n.node_id.clone(),
             Self::GotoNode(n) => n.node_id.clone(),
@@ -218,6 +234,11 @@ impl Node {
         let mut ids: Vec<String> = Vec::with_capacity(10);
         match self {
             Self::DialogNode(n) => {
+                n.branches
+                    .iter()
+                    .for_each(|b| ids.push(b.target_node_id.clone()));
+            }
+            Self::LlmChatNode(n) => {
                 n.branches
                     .iter()
                     .for_each(|b| ids.push(b.target_node_id.clone()));
@@ -250,6 +271,7 @@ impl Node {
     pub(crate) fn get_branches(&mut self) -> Option<&mut Vec<Branch>> {
         match self {
             Self::DialogNode(n) => Some(&mut n.branches),
+            Self::LlmChatNode(n) => Some(&mut n.branches),
             Self::EndNode(_) | Self::GotoNode(_) => None,
             Self::ConditionNode(n) => Some(&mut n.branches),
             Self::CollectNode(n) => Some(&mut n.branches),
@@ -306,8 +328,28 @@ pub(crate) struct DialogNode {
     pub(crate) node_name: String,
     #[serde(rename = "dialogText")]
     pub(crate) dialog_text: String,
+    #[serde(rename = "dialogTextType")]
+    pub(crate) dialog_text_type: crate::flow::rt::dto::AnswerType,
     #[serde(rename = "nextStep")]
     pub(crate) next_step: NextActionType,
+    pub(crate) branches: Vec<Branch>,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct LlmChatNode {
+    pub(crate) valid: bool,
+    #[serde(rename = "nodeId")]
+    pub(crate) node_id: String,
+    #[serde(rename = "nodeName")]
+    pub(crate) node_name: String,
+    #[serde(rename = "prompt")]
+    pub(crate) prompt: String,
+    #[serde(rename = "contextLength")]
+    pub(crate) context_length: u8,
+    #[serde(rename = "exitCondition")]
+    pub(crate) exit_condition: crate::flow::rt::node::LlmChatNodeExitCondition,
+    #[serde(rename = "responseStreaming")]
+    pub(crate) response_streaming: bool,
     pub(crate) branches: Vec<Branch>,
 }
 

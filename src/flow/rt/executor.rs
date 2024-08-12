@@ -43,7 +43,7 @@ pub(in crate::flow::rt) fn exec(req: &Request, ctx: &mut Context) -> Result<Resp
     let mut response = Response::new(req);
     for _i in 0..100 {
         // let now = std::time::Instant::now();
-        if let Some(n) = ctx.pop_node() {
+        if let Some(mut n) = ctx.pop_node() {
             // println!("pop node {:?}", now.elapsed());
             let ret = n.exec(&req, ctx, &mut response);
             // println!("node exec {:?}", now.elapsed());

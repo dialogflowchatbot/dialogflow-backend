@@ -4,7 +4,7 @@ use std::vec::Vec;
 use super::condition::ConditionData;
 use super::node::{
     CollectNode, ConditionNode, ExternalHttpCallNode, GotoAnotherNode, GotoMainFlowNode,
-    RuntimeNnodeEnum, SendEmailNode, TerminateNode, TextNode,
+    LlmChatNode, RuntimeNnodeEnum, SendEmailNode, TerminateNode, TextNode,
 };
 use crate::db;
 use crate::db_executor;
@@ -70,6 +70,7 @@ fn check_first_node(
             if node.get_node_id().eq(&id) {
                 match node {
                     Node::DialogNode(ref mut n) => n.node_id = String::from(first_node_id),
+                    Node::LlmChatNode(n) => n.node_id = String::from(first_node_id),
                     Node::ConditionNode(n) => n.node_id = String::from(first_node_id),
                     Node::CollectNode(n) => n.node_id = String::from(first_node_id),
                     Node::GotoNode(n) => n.node_id = String::from(first_node_id),
@@ -154,6 +155,7 @@ fn convert_node(main_flow_id: &str, node: &mut Node) -> Result<()> {
         Node::DialogNode(n) => {
             let node = TextNode {
                 text: n.dialog_text.clone(),
+                text_type: n.dialog_text_type.clone(),
                 ret: NextActionType::WaitUserResponse == n.next_step,
                 next_node_id: n.branches[0].target_node_id.clone(),
             };
@@ -162,6 +164,19 @@ fn convert_node(main_flow_id: &str, node: &mut Node) -> Result<()> {
             let bytes = rkyv::to_bytes::<_, 256>(&r).unwrap();
             // let mut bytes = rkyv::to_bytes::<_, 256>(&node).unwrap();
             // bytes.push(RuntimeNodeTypeId::TextNode as u8);
+            nodes.push((n.node_id.clone(), bytes));
+        }
+        Node::LlmChatNode(n) => {
+            let node = LlmChatNode {
+                prompt: n.prompt.clone(),
+                context_len: n.context_length,
+                cur_run_times: 0,
+                exit_condition: n.exit_condition.clone(),
+                streaming: n.response_streaming,
+                next_node_id: n.branches[0].target_node_id.clone(),
+            };
+            let r = RuntimeNnodeEnum::LlmChatNode(node);
+            let bytes = rkyv::to_bytes::<_, 256>(&r).unwrap();
             nodes.push((n.node_id.clone(), bytes));
         }
         Node::ConditionNode(n) => {
@@ -316,6 +331,7 @@ fn convert_node(main_flow_id: &str, node: &mut Node) -> Result<()> {
             if !n.ending_text.is_empty() {
                 let node = TextNode {
                     text: n.ending_text.clone(),
+                    text_type: super::dto::AnswerType::TextPlain,
                     ret: false,
                     next_node_id: end_node_id,
                 };

@@ -11,6 +11,7 @@ use crate::ai::chat::ResultReceiver;
 use crate::external::http::client as http;
 use crate::flow::rt::collector;
 use crate::flow::subflow::dto::NextActionType;
+use crate::man::settings::get_settings;
 use crate::result::Result;
 use crate::variable::crud as variable;
 use crate::variable::dto::{VariableType, VariableValue};
@@ -39,11 +40,12 @@ pub(crate) enum RuntimeNnodeEnum {
     ExternalHttpCallNode,
     TerminateNode,
     SendEmailNode,
+    LlmChatNode,
 }
 
 #[enum_dispatch(RuntimeNnodeEnum)]
 pub(crate) trait RuntimeNode {
-    fn exec(&self, req: &Request, ctx: &mut Context, response: &mut Response) -> bool;
+    fn exec(&mut self, req: &Request, ctx: &mut Context, response: &mut Response) -> bool;
 }
 
 fn replace_vars(text: &str, req: &Request, ctx: &mut Context) -> Result<String> {
@@ -88,18 +90,19 @@ fn add_next_node(ctx: &mut Context, next_node_id: &str) {
 #[archive(compare(PartialEq), check_bytes)]
 pub(crate) struct TextNode {
     pub(super) text: String,
+    pub(crate) text_type: AnswerType,
     pub(super) ret: bool,
     pub(super) next_node_id: String,
 }
 
 impl RuntimeNode for TextNode {
-    fn exec(&self, req: &Request, ctx: &mut Context, response: &mut Response) -> bool {
+    fn exec(&mut self, req: &Request, ctx: &mut Context, response: &mut Response) -> bool {
         // println!("Into TextNode");
         // let now = std::time::Instant::now();
         match replace_vars(&self.text, &req, ctx) {
             Ok(answer) => response.answers.push(AnswerData {
                 text: answer,
-                answer_type: AnswerType::TextPlain,
+                answer_type: self.text_type.clone(),
             }),
             Err(e) => log::error!("{:?}", e),
         };
@@ -117,7 +120,7 @@ pub(crate) struct GotoMainFlowNode {
 }
 
 impl RuntimeNode for GotoMainFlowNode {
-    fn exec(&self, _req: &Request, ctx: &mut Context, _response: &mut Response) -> bool {
+    fn exec(&mut self, _req: &Request, ctx: &mut Context, _response: &mut Response) -> bool {
         // println!("Into GotoMainFlowNode");
         ctx.main_flow_id.clear();
         ctx.main_flow_id.push_str(&self.main_flow_id);
@@ -133,7 +136,7 @@ pub(crate) struct GotoAnotherNode {
 }
 
 impl RuntimeNode for GotoAnotherNode {
-    fn exec(&self, _req: &Request, ctx: &mut Context, _response: &mut Response) -> bool {
+    fn exec(&mut self, _req: &Request, ctx: &mut Context, _response: &mut Response) -> bool {
         // println!("Into GotoAnotherNode");
         add_next_node(ctx, &self.next_node_id);
         false
@@ -150,7 +153,7 @@ pub(crate) struct CollectNode {
 }
 
 impl RuntimeNode for CollectNode {
-    fn exec(&self, req: &Request, ctx: &mut Context, response: &mut Response) -> bool {
+    fn exec(&mut self, req: &Request, ctx: &mut Context, response: &mut Response) -> bool {
         // println!("Into CollectNode");
         if let Some(r) = collector::collect(&req.user_input, &self.collect_type) {
             // println!("{} {}", &self.var_name, r);
@@ -179,7 +182,7 @@ pub(crate) struct ConditionNode {
 }
 
 impl RuntimeNode for ConditionNode {
-    fn exec(&self, req: &Request, ctx: &mut Context, _response: &mut Response) -> bool {
+    fn exec(&mut self, req: &Request, ctx: &mut Context, _response: &mut Response) -> bool {
         // println!("Into ConditionNode");
         let mut r = false;
         for and_conditions in self.conditions.iter() {
@@ -204,7 +207,7 @@ impl RuntimeNode for ConditionNode {
 pub(crate) struct TerminateNode {}
 
 impl RuntimeNode for TerminateNode {
-    fn exec(&self, _req: &Request, _ctx: &mut Context, response: &mut Response) -> bool {
+    fn exec(&mut self, _req: &Request, _ctx: &mut Context, response: &mut Response) -> bool {
         // println!("Into TerminateNode");
         response.next_action = NextActionType::Terminate;
         true
@@ -219,7 +222,7 @@ pub(crate) struct ExternalHttpCallNode {
 }
 
 impl RuntimeNode for ExternalHttpCallNode {
-    fn exec(&self, req: &Request, ctx: &mut Context, _response: &mut Response) -> bool {
+    fn exec(&mut self, req: &Request, ctx: &mut Context, _response: &mut Response) -> bool {
         // println!("Into ExternalHttpCallNode");
         if let Ok(op) =
             crate::external::http::crud::get_detail(&req.robot_id, self.http_api_id.as_str())
@@ -342,9 +345,8 @@ impl SendEmailNode {
 }
 
 impl RuntimeNode for SendEmailNode {
-    fn exec(&self, req: &Request, ctx: &mut Context, _response: &mut Response) -> bool {
+    fn exec(&mut self, req: &Request, ctx: &mut Context, _response: &mut Response) -> bool {
         // println!("Into SendEmailNode");
-        use crate::man::settings::get_settings;
         if let Ok(op) = get_settings(&req.robot_id) {
             if let Some(settings) = op {
                 if !settings.smtp_host.is_empty() {
@@ -359,27 +361,29 @@ impl RuntimeNode for SendEmailNode {
     }
 }
 
-#[derive(Archive, Deserialize, Serialize)]
+#[derive(Archive, Clone, Deserialize, Serialize, serde::Deserialize)]
 #[archive(compare(PartialEq), check_bytes)]
 pub(crate) enum LlmChatNodeExitCondition {
     Intent(String),
     SpecialInputs(String),
-    MaxChatTimes(u32),
+    MaxChatTimes(u8),
 }
 
-#[derive(Archive, Deserialize, Serialize)]
+#[derive(Archive, Clone, Deserialize, Serialize)]
 #[archive(compare(PartialEq), check_bytes)]
 pub(crate) struct LlmChatNode {
     pub(super) prompt: String,
     pub(super) context_len: u8,
+    pub(super) cur_run_times: u8,
     pub(super) exit_condition: LlmChatNodeExitCondition,
     pub(super) streaming: bool,
     pub(super) next_node_id: String,
 }
 
 impl RuntimeNode for LlmChatNode {
-    fn exec(&self, req: &Request, ctx: &mut Context, response: &mut Response) -> bool {
+    fn exec(&mut self, req: &Request, ctx: &mut Context, response: &mut Response) -> bool {
         // println!("Into LlmChatNode");
+        self.cur_run_times = self.cur_run_times + 1;
         match &self.exit_condition {
             LlmChatNodeExitCondition::Intent(i) => {
                 if req.user_input_intent.is_some() && req.user_input_intent.as_ref().unwrap().eq(i)
@@ -394,8 +398,16 @@ impl RuntimeNode for LlmChatNode {
                     return false;
                 }
             }
-            LlmChatNodeExitCondition::MaxChatTimes(t) => todo!(),
+            LlmChatNodeExitCondition::MaxChatTimes(t) => {
+                if self.cur_run_times > *t {
+                    add_next_node(ctx, &self.next_node_id);
+                    return false;
+                }
+            },
         }
+        let r = RuntimeNnodeEnum::LlmChatNode(self.clone());
+        let bytes = rkyv::to_bytes::<_, 256>(&r).unwrap();
+        ctx.node = Some(bytes.into_vec());
         if self.streaming {
             let r = super::facade::get_sender(&req.session_id);
             if r.is_err() {
@@ -425,6 +437,7 @@ impl RuntimeNode for LlmChatNode {
             }) {
                 log::info!("LlmChatNode response failed, err: {:?}", &e);
             } else {
+                log::info!("LLM response {}", &s);
                 response.answers.push(AnswerData {
                     text: s,
                     answer_type: AnswerType::TextPlain,
