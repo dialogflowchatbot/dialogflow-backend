@@ -251,7 +251,9 @@ async fn ollama(
     sample_len: u32,
     result_receiver: ResultReceiver<'_>,
 ) -> Result<()> {
+    log::info!("s1=|{}|", s);
     let prompts: Vec<super::completion::Prompt> = serde_json::from_str(s)?;
+    log::info!("s2=|{}|", s);
     let mut prompt = String::with_capacity(32);
     for p in prompts.iter() {
         if p.role.eq("user") {

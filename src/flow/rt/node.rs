@@ -97,7 +97,7 @@ pub(crate) struct TextNode {
 
 impl RuntimeNode for TextNode {
     fn exec(&mut self, req: &Request, ctx: &mut Context, response: &mut Response) -> bool {
-        // println!("Into TextNode");
+        log::info!("Into TextNode");
         // let now = std::time::Instant::now();
         match replace_vars(&self.text, &req, ctx) {
             Ok(answer) => response.answers.push(AnswerData {
@@ -106,8 +106,9 @@ impl RuntimeNode for TextNode {
             }),
             Err(e) => log::error!("{:?}", e),
         };
+        log::info!("add {}", &self.next_node_id);
         add_next_node(ctx, &self.next_node_id);
-        // println!("TextNode used time:{:?}", now.elapsed());
+        // log::info!("TextNode used time:{:?}", now.elapsed());
         self.ret
     }
 }
@@ -208,7 +209,7 @@ pub(crate) struct TerminateNode {}
 
 impl RuntimeNode for TerminateNode {
     fn exec(&mut self, _req: &Request, _ctx: &mut Context, response: &mut Response) -> bool {
-        // println!("Into TerminateNode");
+        println!("Into TerminateNode");
         response.next_action = NextActionType::Terminate;
         true
     }
@@ -382,7 +383,7 @@ pub(crate) struct LlmChatNode {
 
 impl RuntimeNode for LlmChatNode {
     fn exec(&mut self, req: &Request, ctx: &mut Context, response: &mut Response) -> bool {
-        // println!("Into LlmChatNode");
+        log::info!("Into LlmChatNode");
         self.cur_run_times = self.cur_run_times + 1;
         match &self.exit_condition {
             LlmChatNodeExitCondition::Intent(i) => {
@@ -394,6 +395,7 @@ impl RuntimeNode for LlmChatNode {
             }
             LlmChatNodeExitCondition::SpecialInputs(s) => {
                 if req.user_input.eq(s) {
+                    log::info!("886 {}", &self.next_node_id);
                     add_next_node(ctx, &self.next_node_id);
                     return false;
                 }
@@ -403,7 +405,7 @@ impl RuntimeNode for LlmChatNode {
                     add_next_node(ctx, &self.next_node_id);
                     return false;
                 }
-            },
+            }
         }
         let r = RuntimeNnodeEnum::LlmChatNode(self.clone());
         let bytes = rkyv::to_bytes::<_, 256>(&r).unwrap();
@@ -430,10 +432,15 @@ impl RuntimeNode for LlmChatNode {
             });
             false
         } else {
+            log::info!("1");
             let mut s = String::with_capacity(1024);
-            if let Err(e) = tokio::runtime::Handle::current().block_on(async {
-                crate::ai::chat::chat(&req.robot_id, &self.prompt, ResultReceiver::StrBuf(&mut s))
-                    .await
+            if let Err(e) = tokio::task::block_in_place(|| {
+                // log::info!("prompt |{}|", &self.prompt);
+                tokio::runtime::Handle::current().block_on(crate::ai::chat::chat(
+                    &req.robot_id,
+                    &self.prompt,
+                    ResultReceiver::StrBuf(&mut s),
+                ))
             }) {
                 log::info!("LlmChatNode response failed, err: {:?}", &e);
             } else {
@@ -443,6 +450,50 @@ impl RuntimeNode for LlmChatNode {
                     answer_type: AnswerType::TextPlain,
                 });
             }
+            // let (s, rev) = std::sync::mpsc::channel::<String>();
+            // let robot_id = req.robot_id.clone();
+            // let prompt = self.prompt.clone();
+            // tokio::task::spawn(async move {
+            //     log::info!("2");
+            //     let mut r = String::with_capacity(1024);
+            //     if let Err(e) =
+            //         crate::ai::chat::chat(&robot_id, &prompt, ResultReceiver::StrBuf(&mut r)).await
+            //     {
+            //         log::info!("LlmChatNode response failed, err: {:?}", &e);
+            //         drop(s);
+            //         return;
+            //     }
+            //     log::info!("3");
+            //     if let Err(_) = s.send(r) {
+            //         log::info!("LlmChatNode sent response failed.");
+            //     }
+            // });
+            // log::info!("4");
+            // match rev.recv() {
+            //     Ok(s) => {
+            //         log::info!("LLM response {}", &s);
+            //         response.answers.push(AnswerData {
+            //             text: s,
+            //             answer_type: AnswerType::TextPlain,
+            //         });
+            //     }
+            //     // Err(tokio::sync::oneshot::error::TryRecvError::Closed) => {}
+            //     Err(e) => log::info!("LlmChatNode response failed, err: {:?}", &e),
+            // }
+            log::info!("5");
+            // let mut s = String::with_capacity(1024);
+            // if let Err(e) = tokio::runtime::Handle::current().block_on(async {
+            //     crate::ai::chat::chat(&req.robot_id, &self.prompt, ResultReceiver::StrBuf(&mut s))
+            //         .await
+            // }) {
+            //     log::info!("LlmChatNode response failed, err: {:?}", &e);
+            // } else {
+            //     log::info!("LLM response {}", &s);
+            //     response.answers.push(AnswerData {
+            //         text: s,
+            //         answer_type: AnswerType::TextPlain,
+            //     });
+            // }
             true
         }
     }

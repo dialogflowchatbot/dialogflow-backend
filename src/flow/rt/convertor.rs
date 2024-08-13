@@ -176,7 +176,7 @@ fn convert_node(main_flow_id: &str, node: &mut Node) -> Result<()> {
                 next_node_id: n.branches[0].target_node_id.clone(),
             };
             let r = RuntimeNnodeEnum::LlmChatNode(node);
-            let bytes = rkyv::to_bytes::<_, 256>(&r).unwrap();
+            let bytes = rkyv::to_bytes::<_, 512>(&r).unwrap();
             nodes.push((n.node_id.clone(), bytes));
         }
         Node::ConditionNode(n) => {
@@ -322,22 +322,25 @@ fn convert_node(main_flow_id: &str, node: &mut Node) -> Result<()> {
             }
         }
         Node::EndNode(n) => {
-            // println!("GotoNode {}", &n.node_id);
+            log::info!("EndNode {}", &n.node_id);
             let node = TerminateNode {};
             let r = RuntimeNnodeEnum::TerminateNode(node);
-            let bytes = rkyv::to_bytes::<_, 64>(&r).unwrap();
-            let end_node_id = format!("{}-2", &n.node_id);
-            nodes.push((end_node_id.clone(), bytes));
-            if !n.ending_text.is_empty() {
+            let ter_bytes = rkyv::to_bytes::<_, 64>(&r).unwrap();
+            if n.ending_text.is_empty() {
+                nodes.push((n.node_id.clone(), ter_bytes));
+            } else {
+                log::info!("Append textNode for endNode {}", &n.ending_text);
+                let end_node_id = format!("{}-2", &n.node_id);
                 let node = TextNode {
                     text: n.ending_text.clone(),
                     text_type: super::dto::AnswerType::TextPlain,
                     ret: false,
-                    next_node_id: end_node_id,
+                    next_node_id: end_node_id.clone(),
                 };
                 let r = RuntimeNnodeEnum::TextNode(node);
                 let bytes = rkyv::to_bytes::<_, 256>(&r).unwrap();
                 nodes.push((n.node_id.clone(), bytes));
+                nodes.push((end_node_id, ter_bytes));
             }
         }
     };

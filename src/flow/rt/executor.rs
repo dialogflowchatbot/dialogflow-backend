@@ -44,6 +44,7 @@ pub(in crate::flow::rt) fn exec(req: &Request, ctx: &mut Context) -> Result<Resp
     for _i in 0..100 {
         // let now = std::time::Instant::now();
         if let Some(mut n) = ctx.pop_node() {
+            log::info!("exec1");
             // println!("pop node {:?}", now.elapsed());
             let ret = n.exec(&req, ctx, &mut response);
             // println!("node exec {:?}", now.elapsed());
@@ -51,6 +52,7 @@ pub(in crate::flow::rt) fn exec(req: &Request, ctx: &mut Context) -> Result<Resp
                 return Ok(response);
             }
         } else {
+            log::info!("exec2");
             return Ok(response);
         }
     }
