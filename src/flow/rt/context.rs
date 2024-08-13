@@ -87,7 +87,7 @@ impl Context {
     // }
 
     pub(in crate::flow::rt) fn no_node(&self) -> bool {
-        self.nodes.is_empty()
+        self.node.is_none() && self.nodes.is_empty()
     }
 
     pub(in crate::flow::rt) fn add_node(&mut self, node_id: &str) {

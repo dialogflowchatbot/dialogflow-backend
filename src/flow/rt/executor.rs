@@ -13,7 +13,9 @@ pub(in crate::flow::rt) async fn process(req: &mut Request) -> Result<Response> 
     // println!("get ctx {:?}", now.elapsed());
     // let now = std::time::Instant::now();
     if ctx.no_node() {
-        ctx.main_flow_id.push_str(&req.main_flow_id);
+        if ctx.main_flow_id.is_empty() {
+            ctx.main_flow_id.push_str(&req.main_flow_id);
+        }
         ctx.add_node(&req.main_flow_id);
     }
     // println!("add_node {:?}", now.elapsed());
