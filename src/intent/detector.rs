@@ -1,9 +1,45 @@
+use regex::Regex;
+
+use super::dto::{Intent, IntentDetail};
 use crate::ai::embedding::embedding;
-use crate::db::embedding as embedding_db;
+use crate::db::{self, embedding as embedding_db};
+use crate::db_executor;
 use crate::result::{Error, Result};
 
 pub(crate) async fn detect(robot_id: &str, s: &str) -> Result<Option<String>> {
     // let now = std::time::Instant::now();
+    let op: Option<Vec<Intent>> = db_executor!(
+        db::query,
+        robot_id,
+        super::crud::TABLE_SUFFIX,
+        super::crud::INTENT_LIST_KEY
+    )?;
+    if op.is_none() {
+        return Ok(None);
+    }
+    let r = op.unwrap();
+    for i in r.iter() {
+        let r: Option<IntentDetail> = db_executor!(
+            db::query,
+            robot_id,
+            super::crud::TABLE_SUFFIX,
+            i.id.as_str()
+        )?;
+        if let Some(detail) = r {
+            for k in detail.keywords.iter() {
+                if k.eq(s) {
+                    // println!("{} {} {}", s, k, &i.name);
+                    return Ok(Some(i.name.clone()));
+                }
+            }
+            for r in detail.regexes.iter() {
+                let re = Regex::new(r)?;
+                if re.is_match(s) {
+                    return Ok(Some(i.name.clone()));
+                }
+            }
+        }
+    }
     let embedding = embedding(robot_id, s).await?;
     // log::info!("Generate embedding cost {:?}", now.elapsed());
     // let s = format!("{:?}", &embedding);

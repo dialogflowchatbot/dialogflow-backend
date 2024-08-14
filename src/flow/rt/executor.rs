@@ -19,11 +19,12 @@ pub(in crate::flow::rt) async fn process(req: &mut Request) -> Result<Response> 
         ctx.add_node(&req.main_flow_id);
     }
     // println!("add_node {:?}", now.elapsed());
-    // let now = std::time::Instant::now();
+    let now = std::time::Instant::now();
     if req.user_input_intent.is_none() {
         req.user_input_intent = detector::detect(&req.robot_id, &req.user_input).await?;
         // println!("{:?}", req.user_input_intent);
     }
+    log::info!("Intent detection took {:?}", now.elapsed());
     if !req.import_variables.is_empty() {
         for v in req.import_variables.iter_mut() {
             let k = std::mem::take(&mut v.var_name);
@@ -46,7 +47,6 @@ pub(in crate::flow::rt) fn exec(req: &Request, ctx: &mut Context) -> Result<Resp
     for _i in 0..100 {
         // let now = std::time::Instant::now();
         if let Some(mut n) = ctx.pop_node() {
-            log::info!("exec1");
             // println!("pop node {:?}", now.elapsed());
             let ret = n.exec(&req, ctx, &mut response);
             // println!("node exec {:?}", now.elapsed());
@@ -54,7 +54,6 @@ pub(in crate::flow::rt) fn exec(req: &Request, ctx: &mut Context) -> Result<Resp
                 return Ok(response);
             }
         } else {
-            log::info!("exec2");
             return Ok(response);
         }
     }

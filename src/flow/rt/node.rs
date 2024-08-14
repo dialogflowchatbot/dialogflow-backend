@@ -97,7 +97,7 @@ pub(crate) struct TextNode {
 
 impl RuntimeNode for TextNode {
     fn exec(&mut self, req: &Request, ctx: &mut Context, response: &mut Response) -> bool {
-        log::info!("Into TextNode");
+        // log::info!("Into TextNode");
         // let now = std::time::Instant::now();
         match replace_vars(&self.text, &req, ctx) {
             Ok(answer) => response.answers.push(AnswerData {
@@ -106,7 +106,7 @@ impl RuntimeNode for TextNode {
             }),
             Err(e) => log::error!("{:?}", e),
         };
-        log::info!("add {}", &self.next_node_id);
+        // log::info!("add {}", &self.next_node_id);
         add_next_node(ctx, &self.next_node_id);
         // log::info!("TextNode used time:{:?}", now.elapsed());
         self.ret
@@ -209,7 +209,7 @@ pub(crate) struct TerminateNode {}
 
 impl RuntimeNode for TerminateNode {
     fn exec(&mut self, _req: &Request, _ctx: &mut Context, response: &mut Response) -> bool {
-        println!("Into TerminateNode");
+        // log::info!("Into TerminateNode");
         response.next_action = NextActionType::Terminate;
         true
     }
@@ -383,7 +383,7 @@ pub(crate) struct LlmChatNode {
 
 impl RuntimeNode for LlmChatNode {
     fn exec(&mut self, req: &Request, ctx: &mut Context, response: &mut Response) -> bool {
-        log::info!("Into LlmChatNode");
+        // log::info!("Into LlmChatNode");
         self.cur_run_times = self.cur_run_times + 1;
         match &self.exit_condition {
             LlmChatNodeExitCondition::Intent(i) => {
@@ -432,7 +432,6 @@ impl RuntimeNode for LlmChatNode {
             });
             false
         } else {
-            log::info!("1");
             let mut s = String::with_capacity(1024);
             if let Err(e) = tokio::task::block_in_place(|| {
                 // log::info!("prompt |{}|", &self.prompt);
@@ -454,7 +453,6 @@ impl RuntimeNode for LlmChatNode {
             // let robot_id = req.robot_id.clone();
             // let prompt = self.prompt.clone();
             // tokio::task::spawn(async move {
-            //     log::info!("2");
             //     let mut r = String::with_capacity(1024);
             //     if let Err(e) =
             //         crate::ai::chat::chat(&robot_id, &prompt, ResultReceiver::StrBuf(&mut r)).await
@@ -463,12 +461,10 @@ impl RuntimeNode for LlmChatNode {
             //         drop(s);
             //         return;
             //     }
-            //     log::info!("3");
             //     if let Err(_) = s.send(r) {
             //         log::info!("LlmChatNode sent response failed.");
             //     }
             // });
-            // log::info!("4");
             // match rev.recv() {
             //     Ok(s) => {
             //         log::info!("LLM response {}", &s);
@@ -480,7 +476,6 @@ impl RuntimeNode for LlmChatNode {
             //     // Err(tokio::sync::oneshot::error::TryRecvError::Closed) => {}
             //     Err(e) => log::info!("LlmChatNode response failed, err: {:?}", &e),
             // }
-            log::info!("5");
             // let mut s = String::with_capacity(1024);
             // if let Err(e) = tokio::runtime::Handle::current().block_on(async {
             //     crate::ai::chat::chat(&req.robot_id, &self.prompt, ResultReceiver::StrBuf(&mut s))

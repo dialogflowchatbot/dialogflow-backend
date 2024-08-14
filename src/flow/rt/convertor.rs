@@ -322,14 +322,14 @@ fn convert_node(main_flow_id: &str, node: &mut Node) -> Result<()> {
             }
         }
         Node::EndNode(n) => {
-            log::info!("EndNode {}", &n.node_id);
+            // log::info!("EndNode {}", &n.node_id);
             let node = TerminateNode {};
             let r = RuntimeNnodeEnum::TerminateNode(node);
             let ter_bytes = rkyv::to_bytes::<_, 64>(&r).unwrap();
             if n.ending_text.is_empty() {
                 nodes.push((n.node_id.clone(), ter_bytes));
             } else {
-                log::info!("Append textNode for endNode {}", &n.ending_text);
+                // log::info!("Append textNode for endNode {}", &n.ending_text);
                 let end_node_id = format!("{}-2", &n.node_id);
                 let node = TextNode {
                     text: n.ending_text.clone(),
