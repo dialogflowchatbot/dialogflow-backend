@@ -370,6 +370,14 @@ pub(crate) enum LlmChatNodeExitCondition {
     MaxChatTimes(u8),
 }
 
+#[derive(Archive, Clone, Deserialize, Serialize, serde::Deserialize)]
+#[archive(compare(PartialEq), check_bytes)]
+pub(crate) enum LlmChatNodeWhenTimeoutThen {
+    GotoAnotherNode,
+    ResponseAlternateText(String),
+    DoNothing,
+}
+
 #[derive(Archive, Clone, Deserialize, Serialize)]
 #[archive(compare(PartialEq), check_bytes)]
 pub(crate) struct LlmChatNode {
@@ -377,7 +385,10 @@ pub(crate) struct LlmChatNode {
     pub(super) context_len: u8,
     pub(super) cur_run_times: u8,
     pub(super) exit_condition: LlmChatNodeExitCondition,
+    pub(super) when_timeout_then: LlmChatNodeWhenTimeoutThen,
     pub(super) streaming: bool,
+    pub(crate) connect_timeout: Option<u32>,
+    pub(crate) read_timeout: Option<u32>,
     pub(super) next_node_id: String,
 }
 
@@ -413,19 +424,29 @@ impl RuntimeNode for LlmChatNode {
         if self.streaming {
             let r = super::facade::get_sender(&req.session_id);
             if r.is_err() {
+                add_next_node(ctx, &self.next_node_id);
                 return false;
             }
             let s_op = r.unwrap();
             if s_op.is_none() {
+                add_next_node(ctx, &self.next_node_id);
                 return false;
             }
             let s = s_op.unwrap();
             let ticket = String::new();
             let robot_id = req.robot_id.clone();
             let prompt = self.prompt.clone();
+            let connect_timeout = self.connect_timeout.clone();
+            let read_timeout = self.read_timeout.clone();
             tokio::task::spawn(async move {
-                if let Err(e) =
-                    crate::ai::chat::chat(&robot_id, &prompt, ResultReceiver::SseSender(&s)).await
+                if let Err(e) = crate::ai::chat::chat(
+                    &robot_id,
+                    &prompt,
+                    connect_timeout,
+                    read_timeout,
+                    ResultReceiver::SseSender(&s),
+                )
+                .await
                 {
                     log::info!("LlmChatNode response failed, err: {:?}", &e);
                 }
@@ -438,17 +459,27 @@ impl RuntimeNode for LlmChatNode {
                 tokio::runtime::Handle::current().block_on(crate::ai::chat::chat(
                     &req.robot_id,
                     &self.prompt,
+                    self.connect_timeout,
+                    self.read_timeout,
                     ResultReceiver::StrBuf(&mut s),
                 ))
             }) {
                 log::info!("LlmChatNode response failed, err: {:?}", &e);
-            } else {
-                log::info!("LLM response {}", &s);
-                response.answers.push(AnswerData {
-                    text: s,
-                    answer_type: AnswerType::TextPlain,
-                });
+                match &self.when_timeout_then {
+                    LlmChatNodeWhenTimeoutThen::GotoAnotherNode => {
+                        ctx.node = None;
+                        add_next_node(ctx, &self.next_node_id);
+                        return false;
+                    }
+                    LlmChatNodeWhenTimeoutThen::ResponseAlternateText(t) => s.push_str(t),
+                    LlmChatNodeWhenTimeoutThen::DoNothing => return false,
+                }
             }
+            log::info!("LLM response {}", &s);
+            response.answers.push(AnswerData {
+                text: s,
+                answer_type: AnswerType::TextPlain,
+            });
             // let (s, rev) = std::sync::mpsc::channel::<String>();
             // let robot_id = req.robot_id.clone();
             // let prompt = self.prompt.clone();

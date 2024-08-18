@@ -37,6 +37,8 @@ pub(crate) fn replace_model_cache(robot_id: &str, m: &HuggingFaceModel) -> Resul
 pub(crate) async fn chat(
     robot_id: &str,
     prompt: &str,
+    connect_timeout: Option<u32>,
+    read_timeout: Option<u32>,
     result_receiver: ResultReceiver<'_>,
 ) -> Result<()> {
     if let Some(settings) = settings::get_settings(robot_id)? {
@@ -57,8 +59,9 @@ pub(crate) async fn chat(
                 open_ai(
                     &m,
                     prompt,
-                    settings.text_generation_provider.connect_timeout_millis,
-                    settings.text_generation_provider.read_timeout_millis,
+                    connect_timeout
+                        .unwrap_or(settings.text_generation_provider.connect_timeout_millis),
+                    read_timeout.unwrap_or(settings.text_generation_provider.read_timeout_millis),
                     &settings.text_generation_provider.proxy_url,
                     result_receiver,
                 )
@@ -70,8 +73,9 @@ pub(crate) async fn chat(
                     &settings.text_generation_provider.api_url,
                     &m,
                     prompt,
-                    settings.text_generation_provider.connect_timeout_millis,
-                    settings.text_generation_provider.read_timeout_millis,
+                    connect_timeout
+                        .unwrap_or(settings.text_generation_provider.connect_timeout_millis),
+                    read_timeout.unwrap_or(settings.text_generation_provider.read_timeout_millis),
                     &settings.text_generation_provider.proxy_url,
                     settings.text_generation_provider.max_response_token_length,
                     result_receiver,

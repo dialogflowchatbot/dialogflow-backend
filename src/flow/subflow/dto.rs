@@ -348,9 +348,15 @@ pub(crate) struct LlmChatNode {
     pub(crate) context_length: u8,
     #[serde(rename = "exitCondition")]
     pub(crate) exit_condition: crate::flow::rt::node::LlmChatNodeExitCondition,
+    #[serde(rename = "whenTimeoutThen")]
+    pub(crate) when_timeout_then: crate::flow::rt::node::LlmChatNodeWhenTimeoutThen,
     #[serde(rename = "responseStreaming")]
     pub(crate) response_streaming: bool,
     pub(crate) branches: Vec<Branch>,
+    #[serde(rename = "connectTimeout")]
+    pub(crate) connect_timeout: Option<u32>,
+    #[serde(rename = "readTimeout")]
+    pub(crate) read_timeout: Option<u32>,
 }
 
 #[derive(Deserialize)]

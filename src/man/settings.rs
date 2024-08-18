@@ -26,9 +26,9 @@ static SETTINGS_CACHE: LazyLock<Mutex<HashMap<String, Settings>>> =
 #[derive(Deserialize, Serialize)]
 pub(crate) struct HfModelDownload {
     #[serde(rename = "connectTimeoutMillis")]
-    pub(crate) connect_timeout_millis: u16,
+    pub(crate) connect_timeout_millis: u32,
     #[serde(rename = "readTimeoutMillis")]
-    pub(crate) read_timeout_millis: u16,
+    pub(crate) read_timeout_millis: u32,
     #[serde(rename = "accessToken")]
     pub(crate) access_token: String,
 }

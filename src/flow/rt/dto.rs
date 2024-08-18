@@ -53,6 +53,7 @@ pub(crate) struct AnswerData {
 pub(crate) struct Response {
     #[serde(rename = "sessionId")]
     pub(crate) session_id: String,
+    pub(crate) have_answers: bool,
     pub(crate) answers: Vec<AnswerData>,
     #[serde(rename = "collectData")]
     pub(crate) collect_data: Vec<CollectData>,
@@ -68,6 +69,7 @@ impl Response {
     pub(crate) fn new(req: &Request) -> Self {
         Self {
             session_id: req.session_id.clone(),
+            have_answers: false,
             answers: Vec::with_capacity(5),
             collect_data: Vec::with_capacity(10),
             next_action: NextActionType::None,
