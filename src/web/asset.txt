@@ -1,7 +1,7 @@
 [
 (include_bytes!(r#"..\resources\assets/assets\inbound-bot-PJJg_rST.png.gz"#), ""),
-(include_bytes!(r#"..\resources\assets/assets\index-BisrZMCw.js.gz"#), "text/javascript"),
-(include_bytes!(r#"..\resources\assets/assets\index-DpRbUEHB.css.gz"#), "text/css"),
+(include_bytes!(r#"..\resources\assets/assets\index-B4PwGmOZ.css.gz"#), "text/css"),
+(include_bytes!(r#"..\resources\assets/assets\index-DaTxxXw1.js.gz"#), "text/javascript"),
 (include_bytes!(r#"..\resources\assets/assets\outbound-bot-EmsLuWRN.png.gz"#), ""),
 (include_bytes!(r#"..\resources\assets/assets\text-bot-CWb_Poym.png.gz"#), ""),
 (include_bytes!(r#"..\resources\assets/assets\usedByDialogNodeTextGeneration-DrFqkTqi.png.gz"#), ""),

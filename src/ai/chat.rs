@@ -293,7 +293,7 @@ async fn ollama(
     map.insert(String::from("options"), Value::from(num_predict));
     let obj = Value::Object(map);
     let body = serde_json::to_string(&obj)?;
-    log::info!("Request Ollama body {}", &body);
+    // log::info!("Request Ollama body {}", &body);
     let req = client.post(u).body(body);
     let res = req.send().await?;
     match result_receiver {

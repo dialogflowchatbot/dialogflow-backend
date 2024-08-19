@@ -433,7 +433,7 @@ impl RuntimeNode for LlmChatNode {
                 return false;
             }
             let s = s_op.unwrap();
-            let ticket = String::new();
+            // let ticket = String::new();
             let robot_id = req.robot_id.clone();
             let prompt = self.prompt.clone();
             let connect_timeout = self.connect_timeout.clone();
@@ -453,6 +453,7 @@ impl RuntimeNode for LlmChatNode {
             });
             false
         } else {
+            let now = std::time::Instant::now();
             let mut s = String::with_capacity(1024);
             if let Err(e) = tokio::task::block_in_place(|| {
                 // log::info!("prompt |{}|", &self.prompt);
@@ -464,7 +465,7 @@ impl RuntimeNode for LlmChatNode {
                     ResultReceiver::StrBuf(&mut s),
                 ))
             }) {
-                log::info!("LlmChatNode response failed, err: {:?}", &e);
+                log::error!("LlmChatNode response failed, err: {:?}", &e);
                 match &self.when_timeout_then {
                     LlmChatNodeWhenTimeoutThen::GotoAnotherNode => {
                         ctx.node = None;
@@ -475,11 +476,14 @@ impl RuntimeNode for LlmChatNode {
                     LlmChatNodeWhenTimeoutThen::DoNothing => return false,
                 }
             }
-            log::info!("LLM response {}", &s);
-            response.answers.push(AnswerData {
-                text: s,
-                answer_type: AnswerType::TextPlain,
-            });
+            log::info!("LLM response |{}|", &s);
+            if !s.is_empty() {
+                response.answers.push(AnswerData {
+                    text: s,
+                    answer_type: AnswerType::TextPlain,
+                });
+            }
+            log::info!("Llm response took {:?}", now.elapsed());
             // let (s, rev) = std::sync::mpsc::channel::<String>();
             // let robot_id = req.robot_id.clone();
             // let prompt = self.prompt.clone();
