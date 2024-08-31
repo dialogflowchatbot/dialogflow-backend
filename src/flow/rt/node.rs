@@ -1,4 +1,5 @@
 use core::time::Duration;
+use std::ops::DerefMut;
 
 use enum_dispatch::enum_dispatch;
 use lettre::transport::smtp::PoolConfig;
@@ -442,6 +443,7 @@ impl RuntimeNode for LlmChatNode {
                 if let Err(e) = crate::ai::chat::chat(
                     &robot_id,
                     &prompt,
+                    None,
                     connect_timeout,
                     read_timeout,
                     ResultReceiver::SseSender(&s),
@@ -457,9 +459,15 @@ impl RuntimeNode for LlmChatNode {
             let mut s = String::with_capacity(1024);
             if let Err(e) = tokio::task::block_in_place(|| {
                 // log::info!("prompt |{}|", &self.prompt);
+                let chat_history = if ctx.chat_history.is_empty() {
+                    None
+                } else {
+                    Some(ctx.chat_history.clone())
+                };
                 tokio::runtime::Handle::current().block_on(crate::ai::chat::chat(
                     &req.robot_id,
                     &self.prompt,
+                    chat_history,
                     self.connect_timeout,
                     self.read_timeout,
                     ResultReceiver::StrBuf(&mut s),

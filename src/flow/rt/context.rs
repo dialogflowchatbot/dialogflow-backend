@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use tokio::time::{interval, Duration};
 
 use super::node::RuntimeNnodeEnum;
+use crate::ai::completion::Prompt;
 use crate::db;
 use crate::man::settings;
 use crate::result::Result;
@@ -36,6 +37,7 @@ pub(crate) struct Context {
     #[serde(skip)]
     pub(crate) none_persistent_data: HashMap<String, String>,
     last_active_time: u64,
+    pub(crate) chat_history: Vec<Prompt>,
 }
 
 impl Context {
@@ -72,6 +74,7 @@ impl Context {
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
                 .as_secs(),
+            chat_history: Vec::with_capacity(16),
         };
         ctx
     }

@@ -3,10 +3,33 @@ use std::time::Duration;
 use std::vec::Vec;
 
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
+use reqwest::Client;
 use reqwest::RequestBuilder;
 
 use super::dto::{HttpReqInfo, Method, PostContentType, Protocol, ResponseData, ValueSource};
+use crate::result::Result;
 use crate::variable::dto::VariableValue;
+
+pub(crate) fn get_client(
+    connect_timeout_millis: u64,
+    read_timeout_millis: u64,
+    proxy_url: &str,
+) -> Result<Client> {
+    let mut client = reqwest::Client::builder()
+        .connect_timeout(Duration::from_millis(connect_timeout_millis))
+        .read_timeout(Duration::from_millis(read_timeout_millis))
+        // Since can not reuse Client currently, so set pool size to 0
+        .pool_max_idle_per_host(0)
+        .pool_idle_timeout(Duration::from_secs(1));
+    if proxy_url.is_empty() {
+        client = client.no_proxy();
+    } else {
+        let proxy = reqwest::Proxy::http(proxy_url)?;
+        client = client.proxy(proxy);
+    }
+    let client = client.build()?;
+    Ok(client)
+}
 
 pub(crate) async fn req_async(
     info: HttpReqInfo,

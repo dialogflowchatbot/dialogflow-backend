@@ -1,5 +1,3 @@
-use core::time::Duration;
-
 // use std::collections::VecDeque;
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
@@ -121,16 +119,11 @@ async fn open_ai(
     read_timeout_millis: u32,
     proxy_url: &str,
 ) -> Result<Vec<f32>> {
-    let mut client = reqwest::Client::builder()
-        .connect_timeout(Duration::from_millis(connect_timeout_millis.into()))
-        .read_timeout(Duration::from_millis(read_timeout_millis.into()));
-    if proxy_url.is_empty() {
-        client = client.no_proxy();
-    } else {
-        let proxy = reqwest::Proxy::http(proxy_url)?;
-        client = client.proxy(proxy);
-    }
-    let client = client.build()?;
+    let client = crate::external::http::get_client(
+        connect_timeout_millis.into(),
+        read_timeout_millis.into(),
+        proxy_url,
+    )?;
     let mut map = Map::new();
     map.insert(String::from("input"), Value::String(String::from(s)));
     map.insert(String::from("model"), Value::String(String::from(m)));
@@ -174,16 +167,11 @@ async fn ollama(
     read_timeout_millis: u32,
     proxy_url: &str,
 ) -> Result<Vec<f32>> {
-    let mut client = reqwest::Client::builder()
-        .connect_timeout(Duration::from_millis(connect_timeout_millis.into()))
-        .read_timeout(Duration::from_millis(read_timeout_millis.into()));
-    if proxy_url.is_empty() {
-        client = client.no_proxy();
-    } else {
-        let proxy = reqwest::Proxy::http(proxy_url)?;
-        client = client.proxy(proxy);
-    }
-    let client = client.build()?;
+    let client = crate::external::http::get_client(
+        connect_timeout_millis.into(),
+        read_timeout_millis.into(),
+        proxy_url,
+    )?;
     let mut map = Map::new();
     map.insert(String::from("prompt"), Value::String(String::from(s)));
     map.insert(String::from("model"), Value::String(String::from(m)));

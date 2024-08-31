@@ -1,4 +1,3 @@
-use core::time::Duration;
 use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex};
 
@@ -25,7 +24,7 @@ pub(crate) enum TextGenerationProvider {
     Ollama(String),
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub(crate) struct Prompt {
     pub(crate) role: String,
     pub(crate) content: String,
@@ -184,7 +183,7 @@ async fn huggingface(
 ) -> Result<()> {
     let info = m.get_info();
     // log::info!("model_type={:?}", &info.model_type);
-    let new_prompt = info.convert_prompt(prompt)?;
+    let new_prompt = info.convert_prompt(prompt, None)?;
     let mut model = LOADED_MODELS.lock().unwrap_or_else(|e| {
         log::warn!("{:#?}", &e);
         e.into_inner()
@@ -242,16 +241,11 @@ async fn open_ai(
     proxy_url: &str,
     sender: &Sender<String>,
 ) -> Result<()> {
-    let mut client = reqwest::Client::builder()
-        .connect_timeout(Duration::from_millis(connect_timeout_millis.into()))
-        .read_timeout(Duration::from_millis(read_timeout_millis.into()));
-    if proxy_url.is_empty() {
-        client = client.no_proxy();
-    } else {
-        let proxy = reqwest::Proxy::http(proxy_url)?;
-        client = client.proxy(proxy);
-    }
-    let client = client.build()?;
+    let client = crate::external::http::get_client(
+        connect_timeout_millis.into(),
+        read_timeout_millis.into(),
+        proxy_url,
+    )?;
     let mut message0 = Map::new();
     message0.insert(String::from("role"), Value::from("system"));
     message0.insert(String::from("content"), Value::from("system_hint"));
@@ -319,16 +313,11 @@ async fn ollama(
     if prompt.is_empty() {
         return Ok(());
     }
-    let mut client = reqwest::Client::builder()
-        .connect_timeout(Duration::from_millis(connect_timeout_millis.into()))
-        .read_timeout(Duration::from_millis(read_timeout_millis.into()));
-    if proxy_url.is_empty() {
-        client = client.no_proxy();
-    } else {
-        let proxy = reqwest::Proxy::http(proxy_url)?;
-        client = client.proxy(proxy);
-    }
-    let client = client.build()?;
+    let client = crate::external::http::get_client(
+        connect_timeout_millis.into(),
+        read_timeout_millis.into(),
+        proxy_url,
+    )?;
     let mut map = Map::new();
     map.insert(String::from("prompt"), Value::String(prompt));
     map.insert(String::from("model"), Value::String(String::from(m)));

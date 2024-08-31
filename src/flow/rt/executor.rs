@@ -1,5 +1,6 @@
 use super::context::Context;
 use super::dto::{Request, Response};
+use crate::ai::completion::Prompt;
 use crate::flow::rt::node::RuntimeNode;
 use crate::intent::detector;
 use crate::result::{Error, Result};
@@ -34,7 +35,22 @@ pub(in crate::flow::rt) async fn process(req: &mut Request) -> Result<Response> 
     }
     // println!("intent detect {:?}", now.elapsed());
     // let now = std::time::Instant::now();
+    ctx.chat_history.push(Prompt {
+        role: String::from("user"),
+        content: req.user_input.clone(),
+    });
     let r = exec(req, &mut ctx);
+    if r.is_ok() {
+        let res = r.as_ref().unwrap();
+        if !res.answers.is_empty() {
+            for a in res.answers.iter() {
+                ctx.chat_history.push(Prompt {
+                    role: String::from("assistant"),
+                    content: a.text.clone(),
+                });
+            }
+        }
+    }
     // println!("exec {:?}", now.elapsed());
     // let now = std::time::Instant::now();
     ctx.save()?;

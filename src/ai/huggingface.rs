@@ -92,7 +92,11 @@ pub(crate) struct HuggingFaceModelInfo {
 }
 
 impl HuggingFaceModelInfo {
-    pub(super) fn convert_prompt(&self, s: &str) -> Result<String> {
+    pub(super) fn convert_prompt(
+        &self,
+        s: &str,
+        history: Option<Vec<crate::ai::completion::Prompt>>,
+    ) -> Result<String> {
         let mut prompts: Vec<super::completion::Prompt> = serde_json::from_str(s)?;
         let mut system = String::new();
         let mut user = String::new();
@@ -112,6 +116,15 @@ impl HuggingFaceModelInfo {
                     p.push_str(&system);
                     p.push_str("</s>\n");
                 }
+                if let Some(h) = history {
+                    for i in h.iter() {
+                        p.push_str("<|");
+                        p.push_str(&i.role);
+                        p.push_str("|>\n");
+                        p.push_str(&i.content);
+                        p.push_str("</s>\n");
+                    }
+                }
                 p.push_str("<|user|>\n");
                 p.push_str(&user);
                 p.push_str("</s>\n<|assistant|>");
@@ -128,7 +141,21 @@ impl HuggingFaceModelInfo {
             }
             HuggingFaceModelType::Gemma => {
                 let mut p = String::with_capacity(s.len());
-                p.push_str("<bos><start_of_turn>user\n");
+                // p.push_str("<bos>");
+                if let Some(h) = history {
+                    for i in h.iter() {
+                        p.push_str("<start_of_turn>");
+                        if i.role.eq("assistant") {
+                            p.push_str("model");
+                        } else {
+                            p.push_str(&i.role);
+                        }
+                        p.push_str("\n");
+                        p.push_str(&i.content);
+                        p.push_str("<end_of_turn>\n");
+                    }
+                }
+                p.push_str("<start_of_turn>user\n");
                 p.push_str(&user);
                 p.push_str("<end_of_turn>\n<start_of_turn>model");
                 Ok(p)
@@ -140,6 +167,15 @@ impl HuggingFaceModelInfo {
                     p.push_str("<|system|>\n");
                     p.push_str(&system);
                     p.push_str("<|end|>\n");
+                }
+                if let Some(h) = history {
+                    for i in h.iter() {
+                        p.push_str("<|");
+                        p.push_str(&i.role);
+                        p.push_str("|>\n");
+                        p.push_str(&i.content);
+                        p.push_str("<|end|>\n");
+                    }
                 }
                 p.push_str("<|user|>\n");
                 p.push_str(&user);
