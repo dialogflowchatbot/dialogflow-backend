@@ -9,7 +9,8 @@ use candle::{DType, Device};
 use candle_nn::VarBuilder;
 use candle_transformers::models::bert::{BertModel, Config, DTYPE};
 use candle_transformers::models::gemma::{Config as GemmaConfig, Model as GemmaModel};
-use candle_transformers::models::llama::{Cache as LlamaCache, Llama, LlamaConfig};
+use candle_transformers::models::llama::{Cache as LlamaCache, Llama, LlamaConfig, LlamaEosToks};
+use candle_transformers::models::parler_tts::{Config as ParlerTtsConfig, Model as ParlerTtsModel};
 use candle_transformers::models::phi3::{Config as Phi3Config, Model as Phi3};
 use futures_util::StreamExt;
 use reqwest::header::{HeaderMap, HeaderValue};
@@ -38,11 +39,14 @@ pub(crate) enum HuggingFaceModel {
     TinyLlama1_1bChatV1_0,
     Gemma2bInstruct,
     Gemma7bInstruct,
+    ParlerTtsMiniV1,
+    ParlerTtsLargeV1,
+    WhisperLargeV3,
 }
 
 pub(crate) enum LoadedHuggingFaceModel {
     Bert((BertModel, Tokenizer)),
-    Llama((Device, Llama, LlamaCache, Tokenizer, Option<u32>)),
+    Llama((Device, Llama, LlamaCache, Tokenizer, Option<LlamaEosToks>)),
     Gemma((Device, GemmaModel, Tokenizer)),
     Phi3((Device, Phi3, Tokenizer)),
 }
@@ -376,6 +380,36 @@ impl HuggingFaceModel {
                 dimenssions: 1024,
                 model_type: HuggingFaceModelType::Gemma,
             },
+            HuggingFaceModel::ParlerTtsMiniV1 => HuggingFaceModelInfo {
+                repository: "parler-tts/parler-tts-mini-v1",
+                mirror: "parler-tts/parler-tts-mini-v1",
+                model_files: get_common_model_files(),
+                model_index_file: "",
+                tokenizer_filename: "tokenizer.json",
+                dimenssions: 1024,
+                model_type: HuggingFaceModelType::Llama,
+            },
+            HuggingFaceModel::ParlerTtsLargeV1 => HuggingFaceModelInfo {
+                repository: "parler-tts/parler-tts-large-v1",
+                mirror: "parler-tts/parler-tts-large-v1",
+                model_files: {
+                    let mut v = get_common_model_files();
+                    let mut idx = 0usize;
+                    for &f in v.iter() {
+                        if f.eq("model.safetensors") {
+                            break;
+                        }
+                        idx = idx + 1;
+                    }
+                    v.remove(idx);
+                    v
+                },
+                model_index_file: "model.safetensors.index.json",
+                tokenizer_filename: "tokenizer.json",
+                dimenssions: 1024,
+                model_type: HuggingFaceModelType::Gemma,
+            },
+            HuggingFaceModel::WhisperLargeV3 => todo!(),
         }
     }
 }
@@ -873,7 +907,7 @@ fn get_model_files(info: &HuggingFaceModelInfo) -> Result<Vec<String>> {
 
 pub(crate) fn load_llama_model_files(
     info: &HuggingFaceModelInfo,
-) -> Result<(Device, Llama, LlamaCache, Tokenizer, Option<u32>)> {
+) -> Result<(Device, Llama, LlamaCache, Tokenizer, Option<LlamaEosToks>)> {
     log::info!("load_llama_model_files start");
     let tokenizer = init_tokenizer(&info.repository)?;
     let device = device()?;
@@ -881,14 +915,14 @@ pub(crate) fn load_llama_model_files(
     let config_filename = construct_model_file_path(&info.repository, "config.json");
     let config: LlamaConfig = serde_json::from_slice(&std::fs::read(config_filename)?)?;
     let config = config.into_config(device.is_cuda());
-    let eos_token_id = config
-        .eos_token_id
-        .or_else(|| tokenizer.token_to_id("</s>"));
-    let filenames = get_model_files(info)?;
     let dtype = DType::F16;
     let cache = LlamaCache::new(true, dtype, &config, &device)?;
+    let filenames = get_model_files(info)?;
     let vb = unsafe { VarBuilder::from_mmaped_safetensors(&filenames, dtype, &device)? };
     let m = Llama::load(vb, &config)?;
+    let eos_token_id = config
+        .eos_token_id
+        .or_else(|| tokenizer.token_to_id("</s>").map(LlamaEosToks::Single));
     log::info!("load_llama_model_files end");
     Ok((device, m, cache, tokenizer, eos_token_id))
 }
@@ -909,6 +943,19 @@ pub(crate) fn load_gemma_model_files(
     let filenames = get_model_files(info)?;
     let vb = unsafe { VarBuilder::from_mmaped_safetensors(&filenames, dtype, &device)? };
     let model = GemmaModel::new(device.is_cuda(), &config, vb)?;
+    Ok((device, model, tokenizer))
+}
+
+pub(crate) fn load_parler_tts_model_files(
+    info: &HuggingFaceModelInfo,
+) -> Result<(Device, ParlerTtsModel, Tokenizer)> {
+    let tokenizer = init_tokenizer(&info.repository)?;
+    let device = device()?;
+    let filenames = get_model_files(info)?;
+    let vb = unsafe { VarBuilder::from_mmaped_safetensors(&filenames, DType::F32, &device)? };
+    let config_filename = construct_model_file_path(&info.repository, "config.json");
+    let config: ParlerTtsConfig = serde_json::from_reader(std::fs::File::open(config_filename)?)?;
+    let model = ParlerTtsModel::new(&config, vb)?;
     Ok((device, model, tokenizer))
 }
 

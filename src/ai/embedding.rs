@@ -88,7 +88,15 @@ fn hugging_face(robot_id: &str, info: &HuggingFaceModelInfo, s: &str) -> Result<
     };
     let token_ids = Tensor::new(&tokens[..], &m.device)?.unsqueeze(0)?;
     let token_type_ids = token_ids.zeros_like()?;
-    let outputs = m.forward(&token_ids, &token_type_ids)?;
+    // following attention_mask parameter is needed when batch inputs are of different token length
+    // let attention_mask = tokens
+    //     .iter()
+    //     .map(|tokens| {
+    //         let tokens = tokens.get_attention_mask().to_vec();
+    //         Ok(Tensor::new(tokens.as_slice(), device)?)
+    //     })
+    //     .collect::<Result<Vec<_>>>()?;
+    let outputs = m.forward(&token_ids, &token_type_ids, None)?;
     let (_n_sentence, n_tokens, _hidden_size) = outputs.dims3()?;
     let embeddings = (outputs.sum(1)? / (n_tokens as f64))?;
     let embeddings = embeddings.broadcast_div(&embeddings.sqr()?.sum_keepdim(1)?.sqrt()?)?;

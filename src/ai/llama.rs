@@ -1,6 +1,6 @@
 use candle::{Device, Tensor};
 use candle_transformers::generation::{LogitsProcessor, Sampling};
-use candle_transformers::models::llama::{Cache, Llama};
+use candle_transformers::models::llama::{Cache, Llama, LlamaEosToks};
 // use crossbeam_channel::Sender;
 use frand::Rand;
 use tokenizers::Tokenizer;
@@ -28,7 +28,7 @@ pub(super) fn gen_text(
     model: &Llama,
     cache: &Cache,
     tokenizer: &Tokenizer,
-    eos_token_id: &Option<u32>,
+    eos_token_id: &Option<LlamaEosToks>,
     prompt: &str,
     sample_len: usize,
     top_k: Option<usize>,
@@ -121,8 +121,14 @@ pub(super) fn gen_text(
         token_generated += 1;
         tokens.push(next_token);
 
-        if Some(next_token) == *eos_token_id {
-            break;
+        match eos_token_id {
+            Some(LlamaEosToks::Single(eos_tok_id)) if next_token == *eos_tok_id => {
+                break;
+            }
+            Some(LlamaEosToks::Multiple(ref eos_ids)) if eos_ids.contains(&next_token) => {
+                break;
+            }
+            _ => (),
         }
         if let Some(t) = tokenizer.next_token(next_token)? {
             // log::info!("{&t}");

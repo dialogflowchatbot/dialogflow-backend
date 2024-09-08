@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 use crate::ai::huggingface::HuggingFaceModel;
-use crate::ai::{chat, completion, embedding, huggingface};
+use crate::ai::{asr, chat, completion, embedding, huggingface, tts};
 use crate::db;
 use crate::result::{Error, Result};
 use crate::robot::dto::RobotQuery;
@@ -53,6 +53,10 @@ pub(crate) struct Settings {
     pub(crate) text_generation_provider: TextGenerationProvider,
     #[serde(rename = "sentenceEmbeddingProvider")]
     pub(crate) sentence_embedding_provider: SentenceEmbeddingProvider,
+    #[serde(rename = "asrProvider")]
+    pub(crate) asr_provider: AsrProvider,
+    #[serde(rename = "ttsProvider")]
+    pub(crate) tts_provider: TtsProvider,
     #[serde(rename = "smtpHost")]
     pub(crate) smtp_host: String,
     #[serde(rename = "smtpUsername")]
@@ -152,6 +156,38 @@ pub(crate) struct SentenceEmbeddingProvider {
     pub(crate) proxy_url: String,
 }
 
+#[derive(Clone, Deserialize, Serialize)]
+pub(crate) struct AsrProvider {
+    pub(crate) provider: asr::AsrProvider,
+    #[serde(rename = "apiUrl")]
+    pub(crate) api_url: String,
+    #[serde(rename = "apiKey")]
+    pub(crate) api_key: String,
+    pub(crate) model: String,
+    #[serde(rename = "connectTimeoutMillis")]
+    pub(crate) connect_timeout_millis: u32,
+    #[serde(rename = "readTimeoutMillis")]
+    pub(crate) read_timeout_millis: u32,
+    #[serde(rename = "proxyUrl")]
+    pub(crate) proxy_url: String,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+pub(crate) struct TtsProvider {
+    pub(crate) provider: tts::TtsProvider,
+    #[serde(rename = "apiUrl")]
+    pub(crate) api_url: String,
+    #[serde(rename = "apiKey")]
+    pub(crate) api_key: String,
+    pub(crate) model: String,
+    #[serde(rename = "connectTimeoutMillis")]
+    pub(crate) connect_timeout_millis: u32,
+    #[serde(rename = "readTimeoutMillis")]
+    pub(crate) read_timeout_millis: u32,
+    #[serde(rename = "proxyUrl")]
+    pub(crate) proxy_url: String,
+}
+
 impl Default for GlobalSettings {
     fn default() -> Self {
         GlobalSettings {
@@ -200,6 +236,28 @@ impl Default for Settings {
                     huggingface::HuggingFaceModel::AllMiniLML6V2,
                 ),
                 similarity_threshold: 0.85f32,
+                api_url: String::new(),
+                api_key: String::new(),
+                model: String::new(),
+                connect_timeout_millis: 5000,
+                read_timeout_millis: 10000,
+                proxy_url: String::new(),
+            },
+            asr_provider: AsrProvider {
+                provider: asr::AsrProvider::HuggingFace(
+                    huggingface::HuggingFaceModel::WhisperLargeV3,
+                ),
+                api_url: String::new(),
+                api_key: String::new(),
+                model: String::new(),
+                connect_timeout_millis: 5000,
+                read_timeout_millis: 10000,
+                proxy_url: String::new(),
+            },
+            tts_provider: TtsProvider {
+                provider: tts::TtsProvider::HuggingFace(
+                    huggingface::HuggingFaceModel::ParlerTtsMiniV1,
+                ),
                 api_url: String::new(),
                 api_key: String::new(),
                 model: String::new(),
