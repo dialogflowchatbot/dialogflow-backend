@@ -7,7 +7,7 @@ static NUMBER_REGEX: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"[1-9]([\d]+)?(.[\d]+)?").unwrap());
 
 #[derive(Clone, Deserialize, Serialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
-#[archive(compare(PartialEq), check_bytes)]
+#[rkyv(compare(PartialEq))]
 pub(crate) enum CollectType {
     UserInput,
     Number,

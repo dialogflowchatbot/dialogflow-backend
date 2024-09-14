@@ -150,7 +150,7 @@ fn convert_subflow(mainflow_id: &str, flow_idx: usize, f: &SubFlowDetail) -> Res
 }
 
 fn convert_node(main_flow_id: &str, node: &mut Node) -> Result<()> {
-    let mut nodes: Vec<(String, rkyv::AlignedVec)> = Vec::with_capacity(32);
+    let mut nodes: Vec<(String, rkyv::util::AlignedVec)> = Vec::with_capacity(32);
     match node {
         Node::DialogNode(n) => {
             let node = TextNode {
@@ -161,7 +161,7 @@ fn convert_node(main_flow_id: &str, node: &mut Node) -> Result<()> {
             };
             // println!("Dialog {} {}", &n.node_id, &node.next_node_id);
             let r = RuntimeNnodeEnum::TextNode(node);
-            let bytes = rkyv::to_bytes::<_, 256>(&r).unwrap();
+            let bytes = rkyv::to_bytes::<rkyv::rancor::Error>(&r).unwrap();
             // let mut bytes = rkyv::to_bytes::<_, 256>(&node).unwrap();
             // bytes.push(RuntimeNodeTypeId::TextNode as u8);
             nodes.push((n.node_id.clone(), bytes));
@@ -179,7 +179,7 @@ fn convert_node(main_flow_id: &str, node: &mut Node) -> Result<()> {
                 next_node_id: n.branches[0].target_node_id.clone(),
             };
             let r = RuntimeNnodeEnum::LlmChatNode(node);
-            let bytes = rkyv::to_bytes::<_, 512>(&r).unwrap();
+            let bytes = rkyv::to_bytes::<rkyv::rancor::Error>(&r).unwrap();
             nodes.push((n.node_id.clone(), bytes));
         }
         Node::ConditionNode(n) => {
@@ -197,7 +197,7 @@ fn convert_node(main_flow_id: &str, node: &mut Node) -> Result<()> {
                         next_node_id: b.target_node_id.clone(),
                     };
                     let r = RuntimeNnodeEnum::GotoAnotherNode(node);
-                    let bytes = rkyv::to_bytes::<_, 64>(&r).unwrap();
+                    let bytes = rkyv::to_bytes::<rkyv::rancor::Error>(&r).unwrap();
                     // bytes.push(RuntimeNodeTypeId::GotoAnotherNode as u8);
                     nodes.push((node_id, bytes));
                 } else {
@@ -223,7 +223,7 @@ fn convert_node(main_flow_id: &str, node: &mut Node) -> Result<()> {
                         conditions,
                     };
                     let r = RuntimeNnodeEnum::ConditionNode(node);
-                    let bytes = rkyv::to_bytes::<_, 256>(&r).unwrap();
+                    let bytes = rkyv::to_bytes::<rkyv::rancor::Error>(&r).unwrap();
                     // bytes.push(RuntimeNodeTypeId::ConditionNode as u8);
                     nodes.push((node_id, bytes));
                 }
@@ -255,7 +255,7 @@ fn convert_node(main_flow_id: &str, node: &mut Node) -> Result<()> {
                 failed_node_id: failed_node_id,
             };
             let r = RuntimeNnodeEnum::CollectNode(node);
-            let bytes = rkyv::to_bytes::<_, 128>(&r).unwrap();
+            let bytes = rkyv::to_bytes::<rkyv::rancor::Error>(&r).unwrap();
             // bytes.push(RuntimeNodeTypeId::CollectNode as u8);
             nodes.push((n.node_id.clone(), bytes));
         }
@@ -265,7 +265,7 @@ fn convert_node(main_flow_id: &str, node: &mut Node) -> Result<()> {
                 http_api_id: n.http_api_id.clone(),
             };
             let r = RuntimeNnodeEnum::ExternalHttpCallNode(node);
-            let bytes = rkyv::to_bytes::<_, 128>(&r).unwrap();
+            let bytes = rkyv::to_bytes::<rkyv::rancor::Error>(&r).unwrap();
             // bytes.push(RuntimeNodeTypeId::CollectNode as u8);
             nodes.push((n.node_id.clone(), bytes));
         }
@@ -295,7 +295,7 @@ fn convert_node(main_flow_id: &str, node: &mut Node) -> Result<()> {
                 goto_node_id: goto_node_id,
             };
             let r = RuntimeNnodeEnum::SendEmailNode(node);
-            let bytes = rkyv::to_bytes::<_, 128>(&r).unwrap();
+            let bytes = rkyv::to_bytes::<rkyv::rancor::Error>(&r).unwrap();
             // bytes.push(RuntimeNodeTypeId::CollectNode as u8);
             nodes.push((n.node_id.clone(), bytes));
         }
@@ -308,7 +308,7 @@ fn convert_node(main_flow_id: &str, node: &mut Node) -> Result<()> {
                         next_node_id: n.goto_subflow_id.clone(),
                     };
                     let r = RuntimeNnodeEnum::GotoMainFlowNode(node);
-                    let bytes = rkyv::to_bytes::<_, 64>(&r).unwrap();
+                    let bytes = rkyv::to_bytes::<rkyv::rancor::Error>(&r).unwrap();
                     nodes.push((n.node_id.clone(), bytes));
                 }
                 NextActionType::GotoSubFlow => {
@@ -316,7 +316,7 @@ fn convert_node(main_flow_id: &str, node: &mut Node) -> Result<()> {
                         next_node_id: n.goto_subflow_id.clone(),
                     };
                     let r = RuntimeNnodeEnum::GotoAnotherNode(node);
-                    let bytes = rkyv::to_bytes::<_, 64>(&r).unwrap();
+                    let bytes = rkyv::to_bytes::<rkyv::rancor::Error>(&r).unwrap();
                     // bytes.push(RuntimeNodeTypeId::GotoAnotherNode as u8);
                     nodes.push((n.node_id.clone(), bytes));
                 }
@@ -328,7 +328,7 @@ fn convert_node(main_flow_id: &str, node: &mut Node) -> Result<()> {
             // log::info!("EndNode {}", &n.node_id);
             let node = TerminateNode {};
             let r = RuntimeNnodeEnum::TerminateNode(node);
-            let ter_bytes = rkyv::to_bytes::<_, 64>(&r).unwrap();
+            let ter_bytes = rkyv::to_bytes::<rkyv::rancor::Error>(&r).unwrap();
             if n.ending_text.is_empty() {
                 nodes.push((n.node_id.clone(), ter_bytes));
             } else {
@@ -341,7 +341,7 @@ fn convert_node(main_flow_id: &str, node: &mut Node) -> Result<()> {
                     next_node_id: end_node_id.clone(),
                 };
                 let r = RuntimeNnodeEnum::TextNode(node);
-                let bytes = rkyv::to_bytes::<_, 256>(&r).unwrap();
+                let bytes = rkyv::to_bytes::<rkyv::rancor::Error>(&r).unwrap();
                 nodes.push((n.node_id.clone(), bytes));
                 nodes.push((end_node_id, ter_bytes));
             }

@@ -26,7 +26,7 @@ pub(crate) fn get_runtime_node(
 
 pub(crate) fn save_runtime_nodes(
     main_flow_id: &str,
-    nodes: Vec<(String, rkyv::AlignedVec)>,
+    nodes: Vec<(String, rkyv::util::AlignedVec)>,
 ) -> Result<()> {
     let table_name = get_table_name(main_flow_id);
     let table: TableDefinition<&str, &[u8]> = TableDefinition::new(&table_name);

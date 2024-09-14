@@ -12,7 +12,7 @@ use crate::variable::dto::VariableType;
 #[derive(
     Clone, Copy, Deserialize, Serialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize,
 )]
-#[archive(compare(PartialEq), check_bytes)]
+#[rkyv(compare(PartialEq))]
 pub(crate) enum ConditionType {
     UserInput,
     UserIntent,
@@ -24,7 +24,7 @@ pub(crate) enum ConditionType {
 #[derive(
     Clone, Copy, Deserialize, Serialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize,
 )]
-#[archive(compare(PartialEq), check_bytes)]
+#[rkyv(compare(PartialEq))]
 pub(crate) enum CompareType {
     HasValue,
     DoesNotHaveValue,
@@ -43,7 +43,7 @@ pub(crate) enum CompareType {
 #[derive(
     Copy, Clone, Debug, Deserialize, Serialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize,
 )]
-#[archive(compare(PartialEq), check_bytes)]
+#[rkyv(compare(PartialEq))]
 pub(crate) enum TargetDataVariant {
     Const,
     Variable,
@@ -90,7 +90,7 @@ macro_rules! compare_numbers {
 }
 
 #[derive(Clone, Deserialize, Serialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
-#[archive(compare(PartialEq), check_bytes)]
+#[rkyv(compare(PartialEq))]
 pub(crate) struct ConditionData {
     pub(crate) condition_type: ConditionType,
     pub(crate) compare_type: CompareType,

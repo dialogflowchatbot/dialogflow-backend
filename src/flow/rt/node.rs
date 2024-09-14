@@ -1,9 +1,9 @@
 use core::time::Duration;
-use std::ops::DerefMut;
+// use std::ops::DerefMut;
 
 use enum_dispatch::enum_dispatch;
 use lettre::transport::smtp::PoolConfig;
-use rkyv::{Archive, Deserialize, Serialize};
+use rkyv::{util::AlignedVec, Archive, Deserialize, Serialize};
 
 use super::condition::ConditionData;
 use super::context::Context;
@@ -31,7 +31,7 @@ const VAR_WRAP_SYMBOL: char = '`';
 
 #[enum_dispatch]
 #[derive(Archive, Deserialize, Serialize)]
-#[archive(compare(PartialEq), check_bytes)]
+#[rkyv(compare(PartialEq))]
 pub(crate) enum RuntimeNnodeEnum {
     TextNode,
     ConditionNode,
@@ -88,7 +88,7 @@ fn add_next_node(ctx: &mut Context, next_node_id: &str) {
 }
 
 #[derive(Archive, Deserialize, Serialize)]
-#[archive(compare(PartialEq), check_bytes)]
+#[rkyv(compare(PartialEq))]
 pub(crate) struct TextNode {
     pub(super) text: String,
     pub(crate) text_type: AnswerType,
@@ -115,7 +115,7 @@ impl RuntimeNode for TextNode {
 }
 
 #[derive(Archive, Deserialize, Serialize)]
-#[archive(compare(PartialEq), check_bytes)]
+#[rkyv(compare(PartialEq))]
 pub(crate) struct GotoMainFlowNode {
     pub(super) main_flow_id: String,
     pub(super) next_node_id: String,
@@ -132,7 +132,7 @@ impl RuntimeNode for GotoMainFlowNode {
 }
 
 #[derive(Archive, Deserialize, Serialize)]
-#[archive(compare(PartialEq), check_bytes)]
+#[rkyv(compare(PartialEq))]
 pub(crate) struct GotoAnotherNode {
     pub(super) next_node_id: String,
 }
@@ -146,7 +146,7 @@ impl RuntimeNode for GotoAnotherNode {
 }
 
 #[derive(Archive, Deserialize, Serialize)]
-#[archive(compare(PartialEq), check_bytes)]
+#[rkyv(compare(PartialEq))]
 pub(crate) struct CollectNode {
     pub(super) var_name: String,
     pub(super) collect_type: collector::CollectType,
@@ -176,7 +176,7 @@ impl RuntimeNode for CollectNode {
 }
 
 #[derive(Archive, Deserialize, Serialize)]
-#[archive(compare(PartialEq), check_bytes)]
+#[rkyv(compare(PartialEq))]
 pub(crate) struct ConditionNode {
     pub(super) next_node_id: String,
     pub(super) goto_node_id: String,
@@ -205,7 +205,7 @@ impl RuntimeNode for ConditionNode {
 }
 
 #[derive(Archive, Deserialize, Serialize)]
-#[archive(compare(PartialEq), check_bytes)]
+#[rkyv(compare(PartialEq))]
 pub(crate) struct TerminateNode {}
 
 impl RuntimeNode for TerminateNode {
@@ -217,7 +217,7 @@ impl RuntimeNode for TerminateNode {
 }
 
 #[derive(Archive, Deserialize, Serialize)]
-#[archive(compare(PartialEq), check_bytes)]
+#[rkyv(compare(PartialEq))]
 pub(crate) struct ExternalHttpCallNode {
     pub(super) next_node_id: String,
     pub(super) http_api_id: String,
@@ -254,7 +254,7 @@ impl RuntimeNode for ExternalHttpCallNode {
 }
 
 #[derive(Archive, Deserialize, Serialize)]
-#[archive(compare(PartialEq), check_bytes)]
+#[rkyv(compare(PartialEq))]
 pub(crate) struct SendEmailNode {
     pub(super) from: String,
     pub(super) to_recipients: Vec<String>,
@@ -364,7 +364,7 @@ impl RuntimeNode for SendEmailNode {
 }
 
 #[derive(Archive, Clone, Deserialize, Serialize, serde::Deserialize)]
-#[archive(compare(PartialEq), check_bytes)]
+#[rkyv(compare(PartialEq))]
 pub(crate) enum LlmChatNodeExitCondition {
     Intent(String),
     SpecialInputs(String),
@@ -372,7 +372,7 @@ pub(crate) enum LlmChatNodeExitCondition {
 }
 
 #[derive(Archive, Clone, Deserialize, Serialize, serde::Deserialize)]
-#[archive(compare(PartialEq), check_bytes)]
+#[rkyv(compare(PartialEq))]
 pub(crate) enum LlmChatNodeWhenTimeoutThen {
     GotoAnotherNode,
     ResponseAlternateText(String),
@@ -380,7 +380,7 @@ pub(crate) enum LlmChatNodeWhenTimeoutThen {
 }
 
 #[derive(Archive, Clone, Deserialize, Serialize)]
-#[archive(compare(PartialEq), check_bytes)]
+#[rkyv(compare(PartialEq))]
 pub(crate) struct LlmChatNode {
     pub(super) prompt: String,
     pub(super) context_len: u8,
@@ -420,7 +420,7 @@ impl RuntimeNode for LlmChatNode {
             }
         }
         let r = RuntimeNnodeEnum::LlmChatNode(self.clone());
-        let bytes = rkyv::to_bytes::<_, 256>(&r).unwrap();
+        let bytes = rkyv::to_bytes::<rkyv::rancor::Error>(&r).unwrap();
         ctx.node = Some(bytes.into_vec());
         if self.streaming {
             let r = super::facade::get_sender(&req.session_id);
@@ -538,9 +538,10 @@ impl RuntimeNode for LlmChatNode {
 }
 
 pub(crate) fn deser_node(bytes: &[u8]) -> Result<RuntimeNnodeEnum> {
-    let mut vec = rkyv::AlignedVec::new();
-    vec.extend_from_slice(bytes);
-    let archived = rkyv::check_archived_root::<RuntimeNnodeEnum>(&vec).unwrap();
-    let deserialized: RuntimeNnodeEnum = archived.deserialize(&mut rkyv::Infallible).unwrap();
-    return Ok(deserialized);
+    let mut v = AlignedVec::<256>::with_capacity(bytes.len());
+    v.extend_from_slice(bytes);
+    let r = rkyv::from_bytes::<RuntimeNnodeEnum, rkyv::rancor::Error>(&v).unwrap();
+    // let archived = rkyv::access::<ArchivedRuntimeNnodeEnum, rkyv::rancor::Error>(bytes).unwrap();
+    // let deserialized = rkyv::deserialize::<RuntimeNnodeEnum, rkyv::rancor::Error>(archived).unwrap();
+    return Ok(r);
 }
