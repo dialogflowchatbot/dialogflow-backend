@@ -2,6 +2,7 @@
 use std::sync::LazyLock;
 use std::vec::Vec;
 
+use axum::extract::DefaultBodyLimit;
 use axum::http::{header, HeaderMap, HeaderValue, Method, StatusCode, Uri};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
@@ -9,6 +10,7 @@ use axum::Router;
 use colored::Colorize;
 use serde::{Deserialize, Serialize};
 use tower_http::cors::{AllowOrigin, CorsLayer};
+use tower_http::limit::RequestBodyLimitLayer;
 
 use super::asset::ASSETS_MAP;
 use crate::ai::crud as ai;
@@ -17,6 +19,7 @@ use crate::flow::mainflow::crud as mainflow;
 use crate::flow::rt::facade as rt;
 use crate::flow::subflow::crud as subflow;
 use crate::intent::crud as intent;
+use crate::kb::crud as kb;
 use crate::man::settings;
 use crate::result::Error;
 use crate::robot::crud as robot;
@@ -230,6 +233,10 @@ fn gen_router() -> Router {
             "/management/settings/model/check/embedding",
             get(settings::check_embedding_model),
         )
+        .route(
+            "/kb/doc/upload",
+            post(kb::upload),
+        )
         .route("/management/settings/smtp/test", post(settings::smtp_test))
         .route("/flow/answer", post(rt::answer))
         .route("/flow/answer/sse", post(rt::answer_sse))
@@ -237,6 +244,10 @@ fn gen_router() -> Router {
         .route("/version.json", get(version))
         .route("/check-new-version.json", get(check_new_version))
         // .route("/o", get(subflow::output))
+        .layer(DefaultBodyLimit::disable())
+        .layer(RequestBodyLimitLayer::new(
+            250 * 1024 * 1024, /* 250mb */
+        ))
         .layer(
             CorsLayer::new()
                 .allow_origin(AllowOrigin::predicate(

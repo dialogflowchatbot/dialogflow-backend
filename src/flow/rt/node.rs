@@ -538,10 +538,12 @@ impl RuntimeNode for LlmChatNode {
 }
 
 pub(crate) fn deser_node(bytes: &[u8]) -> Result<RuntimeNnodeEnum> {
+    let now = std::time::Instant::now();
     let mut v = AlignedVec::<256>::with_capacity(bytes.len());
     v.extend_from_slice(bytes);
     let r = rkyv::from_bytes::<RuntimeNnodeEnum, rkyv::rancor::Error>(&v).unwrap();
     // let archived = rkyv::access::<ArchivedRuntimeNnodeEnum, rkyv::rancor::Error>(bytes).unwrap();
     // let deserialized = rkyv::deserialize::<RuntimeNnodeEnum, rkyv::rancor::Error>(archived).unwrap();
+    log::info!("deser_node time {:?}", now.elapsed());
     return Ok(r);
 }

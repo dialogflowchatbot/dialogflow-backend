@@ -41,6 +41,9 @@ pub(crate) async fn detect(robot_id: &str, s: &str) -> Result<Option<String>> {
         }
     }
     let embedding = embedding(robot_id, s).await?;
+    if embedding.0.is_empty() {
+        return Ok(None);
+    }
     // log::info!("Generate embedding cost {:?}", now.elapsed());
     // let s = format!("{:?}", &embedding);
     // let regex = regex::Regex::new(r"\s").unwrap();

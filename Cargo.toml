@@ -15,7 +15,7 @@ name = "dialogflow"
 [dependencies]
 # artful = "0.1.1"
 anyhow = "1.0"
-axum = {version = "0.7", features = ["query", "tokio", "macros"]}
+axum = {version = "0.7", features = ["query", "tokio", "macros", "multipart"]}
 bigdecimal = "0.4"
 # candle-core = { git = "https://github.com/huggingface/candle.git", version = "0.5.1" }
 # candle = { version = "0.6", package = "candle-core", default-features = false }
@@ -57,7 +57,7 @@ scraper = "0.20"
 # strsim = "0.10.0"
 # textdistance = "1.0.2"
 time = { version = "0.3", features = ["formatting"] }
-tower-http = { version = "0.5", features = ["cors"] }
+tower-http = { version = "0.5", features = ["cors", "limit"] }
 # typetag = "0.2"
 tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "rt", "rt-multi-thread", "signal", "time"] }
 tokio-stream = "0.1"

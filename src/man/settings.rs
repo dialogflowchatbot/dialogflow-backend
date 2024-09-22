@@ -45,6 +45,7 @@ pub(crate) struct GlobalSettings {
 
 #[derive(Clone, Deserialize, Serialize)]
 pub(crate) struct Settings {
+    settings_version: u8,
     #[serde(rename = "maxSessionIdleSec")]
     pub(crate) max_session_idle_sec: u32,
     #[serde(rename = "chatProvider")]
@@ -206,6 +207,7 @@ impl Default for GlobalSettings {
 impl Default for Settings {
     fn default() -> Self {
         Settings {
+            settings_version: 1u8,
             max_session_idle_sec: 1800,
             chat_provider: ChatProvider {
                 provider: chat::ChatProvider::HuggingFace(
