@@ -188,3 +188,9 @@ impl From<tokio::task::JoinError> for Error {
         Error::ErrorWithMessage(format!("Thread join error: {:?}", err))
     }
 }
+
+impl From<axum::extract::multipart::MultipartError> for Error {
+    fn from(err: axum::extract::multipart::MultipartError) -> Self {
+        Error::ErrorWithMessage(format!("Multipart error: {:?}", err))
+    }
+}
