@@ -44,3 +44,5 @@ async fn do_upload(robot_id:&str,mut multipart: Multipart) -> Result<()> {
         );
     }
 }
+
+pub(crate) async fn new_qa() -> impl IntoResponse {}
