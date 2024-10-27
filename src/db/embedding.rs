@@ -65,7 +65,7 @@ pub(crate) fn search_idx_db(robot_id: &str, search_vector: Vector) -> Result<Vec
 pub(crate) fn get_sqlite_path() -> std::path::PathBuf {
     let p = Path::new(".").join("data").join("intentev");
     if !p.exists() {
-        std::fs::create_dir(&p).expect("Create data directory failed.");
+        std::fs::create_dir_all(&p).expect("Create data directory failed.");
     }
     p.join("e.dat")
 }
