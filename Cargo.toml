@@ -68,6 +68,8 @@ env_logger = "0.11"
 lettre = { version = "0.11", features = ["tokio1", "smtp-transport", "tokio1-native-tls", "pool"]}
 unicase = "2.8.0"
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "sqlite", "macros"] }
+lopdf = "0.34.0"
+docx-rs = "0.4.17"
 # triple_accel = "0.4.0"
 
 [build-dependencies]

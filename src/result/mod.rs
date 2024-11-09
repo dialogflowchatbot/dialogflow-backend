@@ -194,3 +194,9 @@ impl From<axum::extract::multipart::MultipartError> for Error {
         Error::ErrorWithMessage(format!("Multipart error: {:?}", err))
     }
 }
+
+impl From<docx_rs::ReaderError> for Error {
+    fn from(err: docx_rs::ReaderError) -> Self {
+        Error::ErrorWithMessage(format!("Read docx file failed: {:?}", err))
+    }
+}

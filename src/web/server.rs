@@ -233,10 +233,7 @@ fn gen_router() -> Router {
             "/management/settings/model/check/embedding",
             get(settings::check_embedding_model),
         )
-        .route(
-            "/kb/doc/upload",
-            post(kb::upload),
-        )
+        .route("/kb/doc/upload", post(kb::upload))
         .route("/management/settings/smtp/test", post(settings::smtp_test))
         .route("/flow/answer", post(rt::answer))
         .route("/flow/answer/sse", post(rt::answer_sse))
