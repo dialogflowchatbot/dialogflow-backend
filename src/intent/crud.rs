@@ -193,7 +193,7 @@ fn add_intent(robot_id: &str, intent_name: &str) -> Result<()> {
 }
 
 pub(crate) async fn remove(Json(params): Json<IntentFormData>) -> impl IntoResponse {
-    let r = crate::db::embedding::remove_by_intent_id(&params.robot_id, params.id.as_str())
+    let r = crate::db::embedding_sqlite::remove_by_intent_id(&params.robot_id, params.id.as_str())
         .await
         .and_then(|_| {
             db_executor!(
@@ -434,7 +434,7 @@ pub(crate) async fn remove_phrase(Json(params): Json<IntentFormData>) -> impl In
     if let Ok(result) = r {
         if let Some(mut d) = result {
             let phrase = d.phrases.remove(idx);
-            let r = crate::db::embedding::remove(&params.robot_id, phrase.id).await;
+            let r = crate::db::embedding_sqlite::remove(&params.robot_id, phrase.id).await;
             if let Err(e) = r {
                 return to_res(Err(e));
             }

@@ -2,7 +2,7 @@ use regex::Regex;
 
 use super::dto::{Intent, IntentDetail};
 use crate::ai::embedding::embedding;
-use crate::db::{self, embedding as embedding_db};
+use crate::db::{self, embedding_sqlite as embedding_db};
 use crate::db_executor;
 use crate::result::{Error, Result};
 

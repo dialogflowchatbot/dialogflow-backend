@@ -1,4 +1,5 @@
 pub(crate) mod embedding;
+pub(crate) mod embedding_sqlite;
 
 use std::borrow::{Borrow, Cow};
 use std::sync::LazyLock;
