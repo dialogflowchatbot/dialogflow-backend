@@ -22,14 +22,14 @@ anyhow = "1.0"
 axum = {version = "0.7", features = ["query", "tokio", "macros", "multipart"]}
 bigdecimal = "0.4"
 # candle-core = { git = "https://github.com/huggingface/candle.git", version = "0.5.1" }
-candle = { version = "0.7", package = "candle-core", default-features = false }
+candle = { version = "0.8", package = "candle-core", default-features = false }
 # candle = { git = "https://github.com/huggingface/candle.git", package = "candle-core", default-features = false }
-candle-nn = "0.7.2"
+candle-nn = "0.8"
 # candle-nn = { git = "https://github.com/huggingface/candle.git" }
-# candle-onnx = "0.7"
+# candle-onnx = "0.8"
 # candle-transformers = { git = "https://github.com/huggingface/candle.git" }
-candle-transformers = { version = "0.7" }
-# candle-transformers = { version = "0.7", features = ["flash-attn"] }
+candle-transformers = { version = "0.8" }
+# candle-transformers = { version = "0.8", features = ["flash-attn"] }
 # crossbeam-channel = "0.5"
 frand = "0.10"
 tokenizers = "0.20"
