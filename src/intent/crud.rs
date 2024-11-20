@@ -393,7 +393,8 @@ pub(crate) async fn add_phrase(
         ))));
     }
     let mut d = r.unwrap();
-    let r = detector::save_intent_embedding(&params.robot_id, key, &params.data).await;
+    let r =
+        detector::save_intent_embedding(&params.robot_id, key, &d.intent_name, &params.data).await;
     if r.is_err() {
         return to_res(r.map(|_| ()));
     }
@@ -498,6 +499,7 @@ pub(crate) async fn regenerate_embeddings(
     }
     let d = r.unwrap();
     let array: Vec<&str> = d.phrases.iter().map(|v| v.phrase.as_ref()).collect();
-    let r = detector::save_intent_embeddings(&params.robot_id, &params.data, array).await;
+    let r =
+        detector::save_intent_embeddings(&params.robot_id, &params.data, &d.intent_name, array).await;
     to_res(r)
 }
