@@ -76,7 +76,7 @@ lopdf = "0.34.0"
 docx-rs = "0.4.17"
 # lancedb = "0.13.0"
 libsqlite3-sys = { version = "0.30", features = ["bundled"] }
-sqlite-vec = "0.1.5"
+sqlite-vec = "0.1.6"
 # triple_accel = "0.4.0"
 
 [build-dependencies]

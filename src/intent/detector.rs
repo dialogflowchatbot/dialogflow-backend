@@ -77,6 +77,7 @@ pub(crate) async fn save_intent_embedding(
         log::warn!("{}", &err);
         return Err(Error::ErrorWithMessage(err));
     }
+    log::info!("embedding.0.len() = {}", embedding.0.len());
     let id = embedding_db::add(robot_id, intent_id, intent_name, &embedding.0).await?;
     Ok(id)
 }

@@ -64,7 +64,7 @@ async fn new(d: &RobotData, is_en: bool) -> Result<()> {
     persist(d)?;
     // 机器人意图
     settings::init(&d.robot_id)?;
-    crate::db::embedding_sqlite::create_table(&d.robot_id).await?;
+    crate::db::embedding::create_table(&d.robot_id).await?;
     // 意图
     intent::init(&d.robot_id, is_en)?;
     // 变量
@@ -117,7 +117,7 @@ fn delete_dirs(dir: &Path, cb: &dyn Fn(&DirEntry) -> Result<()>) -> Result<()> {
 }
 
 async fn purge(robot_id: &str) -> Result<()> {
-    crate::db::embedding_sqlite::remove_table(robot_id).await?;
+    crate::db::embedding::remove_table(robot_id).await?;
     // let root = &format!("{}{}", crate::intent::detector::SAVING_PATH_ROOT, robot_id);
     // let path = Path::new(&root);
     // if path.exists() {

@@ -59,7 +59,7 @@ fn get_lang() -> String {
 // }
 
 pub async fn start_app() {
-    crate::db::embedding_sqlite::init_datasource()
+    crate::db::embedding::init_datasource()
         .await
         .expect("Failed initialize vector database.");
 
@@ -358,7 +358,7 @@ async fn shutdown_signal(sender: tokio::sync::oneshot::Sender<()>) {
         Err(_) => log::info!("中断 ctx 失败"),
     };
 
-    crate::db::embedding_sqlite::shutdown().await;
+    crate::db::embedding::shutdown().await;
 
     let m = if *IS_EN {
         "This program has been terminated"

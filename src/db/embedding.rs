@@ -16,11 +16,11 @@ static DATA_SOURCE: OnceLock<SqliteConnPool> = OnceLock::new();
 // static DATA_SOURCES: OnceLock<Mutex<HashMap<String, SqliteConnPool>>> = OnceLock::new();
 
 fn get_sqlite_path() -> std::path::PathBuf {
-    let p = std::path::Path::new(".").join("data").join("intentev");
+    let p = std::path::Path::new(".").join("data");
     if !p.exists() {
         std::fs::create_dir_all(&p).expect("Create data directory failed.");
     }
-    p.join("e.dat")
+    p.join("iev.dat")
 }
 
 pub(crate) async fn init_datasource() -> Result<()> {
@@ -102,10 +102,11 @@ pub(crate) async fn create_table(robot_id: &str) -> Result<()> {
     // println!("Init database");
     // let ddl = include_str!("./embedding_ddl.sql");
     let sql = format!(
-        "CREATE TABLE {} USING vec0 (
-            id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+        "CREATE VIRTUAL TABLE {} USING vec0 (
+            -- id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
             intent_id TEXT NOT NULL,
-            vectors float[4]
+            intent_name TEXT NOT NULL,
+            vectors float[384]
             );",
         robot_id
     );
@@ -148,7 +149,7 @@ pub(crate) async fn add(
 ) -> Result<i64> {
     // check_datasource(robot_id, intent_id).await?;
     let sql = format!(
-        "INSERT INTO {} (intent_id, intent_name, vectors)VALUES(?, ?, ?)",
+        "INSERT INTO {} (rowid, intent_id, intent_name, vectors)VALUES(?, ?, ?, ?)",
         robot_id
     );
     let last_insert_rowid = sqlx::query::<Sqlite>(&sql)
