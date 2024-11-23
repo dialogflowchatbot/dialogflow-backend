@@ -1,8 +1,9 @@
 use regex::Regex;
 
 use super::dto::{Intent, IntentDetail};
+use super::phrase;
 use crate::ai::embedding::embedding;
-use crate::db::{self, embedding as embedding_db};
+use crate::db;
 use crate::db_executor;
 use crate::result::{Error, Result};
 
@@ -51,7 +52,7 @@ pub(crate) async fn detect(robot_id: &str, s: &str) -> Result<Option<String>> {
     // let now = std::time::Instant::now();
     let search_vector: Vec<f32> = embedding.0.into();
     let similarity_threshold = embedding.1 as f64;
-    let mut result = embedding_db::search(robot_id, &search_vector).await?;
+    let mut result = phrase::search(robot_id, &search_vector).await?;
     // log::info!("Searching vector took {:?}", now.elapsed());
     if !result.is_empty() {
         if let Some(record) = result.get_mut(0) {
@@ -65,6 +66,7 @@ pub(crate) async fn detect(robot_id: &str, s: &str) -> Result<Option<String>> {
     Ok(None)
 }
 
+/*
 pub(crate) async fn save_intent_embedding(
     robot_id: &str,
     intent_id: &str,
@@ -78,7 +80,7 @@ pub(crate) async fn save_intent_embedding(
         return Err(Error::ErrorWithMessage(err));
     }
     log::info!("embedding.0.len() = {}", embedding.0.len());
-    let id = embedding_db::add(robot_id, intent_id, intent_name, &embedding.0).await?;
+    let id = phrase::add(robot_id, intent_id, intent_name, &embedding.0).await?;
     Ok(id)
 }
 
@@ -88,7 +90,7 @@ pub(crate) async fn save_intent_embeddings(
     intent_name: &str,
     array: Vec<&str>,
 ) -> Result<()> {
-    embedding_db::remove_by_intent_id(robot_id, intent_id).await?;
+    phrase::remove_by_intent_id(robot_id, intent_id).await?;
     let mut embeddings: Vec<Vec<f32>> = Vec::with_capacity(array.len());
     for &s in array.iter() {
         let embedding = embedding(robot_id, s).await?;
@@ -105,10 +107,11 @@ pub(crate) async fn save_intent_embeddings(
     //     )));
     // }
     if !embeddings.is_empty() {
-        embedding_db::batch_add(robot_id, intent_id, intent_name, &embeddings).await?;
+        phrase::batch_add(robot_id, intent_id, intent_name, &embeddings).await?;
     }
     Ok(())
 }
+*/
 
 // pub(crate) async fn save_intent_embedding2(intent_id: &str, s: &str) -> Result<()> {
 // let embeddings = embedding(s)?;

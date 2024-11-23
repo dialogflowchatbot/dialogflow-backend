@@ -7,6 +7,8 @@ use std::vec::Vec;
 use futures_util::StreamExt;
 use sqlx::{pool::PoolOptions, Row, Sqlite};
 
+use super::dto::IntentPhraseData;
+use crate::ai::embedding::embedding;
 use crate::result::{Error, Result};
 
 type SqliteConnPool = sqlx::Pool<Sqlite>;
@@ -20,7 +22,7 @@ fn get_sqlite_path() -> std::path::PathBuf {
     if !p.exists() {
         std::fs::create_dir_all(&p).expect("Create data directory failed.");
     }
-    p.join("iev.dat")
+    p.join("ipev.dat")
 }
 
 pub(crate) async fn init_datasource() -> Result<()> {
@@ -53,7 +55,7 @@ pub(crate) async fn init_datasource() -> Result<()> {
     let path = get_sqlite_path();
     if path.is_dir() {
         return Err(Error::ErrorWithMessage(String::from(
-            "Created database file failed, there is a directory called: e.dat",
+            "Created database file failed, there is a directory called: ipev.dat",
         )));
     }
     let s = format!("sqlite://{}?mode=rw", path.display());
@@ -79,7 +81,7 @@ pub(crate) async fn init_datasource() -> Result<()> {
     */
 }
 
-pub async fn shutdown() {
+pub async fn shutdown_db() {
     // let mut r = match DATA_SOURCES.lock() {
     //     Ok(l) => l,
     //     Err(e) => e.into_inner(),
@@ -98,22 +100,15 @@ pub async fn shutdown() {
     DATA_SOURCE.get().unwrap().close().await;
 }
 
-pub(crate) async fn create_table(robot_id: &str) -> Result<()> {
+pub(crate) async fn init_tables(robot_id: &str) -> Result<()> {
     // println!("Init database");
     // let ddl = include_str!("./embedding_ddl.sql");
     let sql = format!(
-        "CREATE TABLE p{} USING vec0 (
-            id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-            intent_id TEXT NOT NULL,
-            phrase TEXT NOT NULL
-        );
-        CREATE VIRTUAL TABLE pev{} USING vec0 (
-            -- id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-            intent_id TEXT NOT NULL,
-            intent_name TEXT NOT NULL,
-            vectors float[384]
+        "CREATE TABLE {}_row_id (
+            id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT
+            -- intent_id TEXT NOT NULL,
         );",
-        robot_id, robot_id
+        robot_id
     );
     // log::info!("sql = {}", &sql);
     let mut stream = sqlx::raw_sql(&sql).execute_many(DATA_SOURCE.get().unwrap());
@@ -148,22 +143,59 @@ pub(crate) async fn search(robot_id: &str, vectors: &Vec<f32>) -> Result<Vec<(St
 
 pub(crate) async fn add(
     robot_id: &str,
+    vec_row_id: Option<i64>,
     intent_id: &str,
     intent_name: &str,
-    vectors: &Vec<f32>,
+    phrase: &str,
 ) -> Result<i64> {
     // check_datasource(robot_id, intent_id).await?;
-    let sql = format!(
-        "INSERT INTO {} (rowid, intent_id, intent_name, vectors)VALUES(?, ?, ?, ?)",
-        robot_id
-    );
-    let last_insert_rowid = sqlx::query::<Sqlite>(&sql)
-        .bind(intent_id)
-        .bind(intent_name)
-        .bind(serde_json::to_string(vectors)?)
-        .execute(DATA_SOURCE.get().unwrap())
-        .await?
-        .last_insert_rowid();
+    let vectors = embedding(robot_id, phrase).await?;
+    if vectors.0.is_empty() {
+        let err = format!("{phrase} embedding data is empty");
+        log::warn!("{}", &err);
+        return Err(Error::ErrorWithMessage(err));
+    }
+    log::info!("vectors.0.len() = {}", vectors.0.len());
+    let last_insert_rowid = if vec_row_id.is_none() {
+        let sql = format!("INSERT INTO {}_row_id (id)VALUES(NULL)", robot_id);
+        let last_insert_rowid = sqlx::query::<Sqlite>(&sql)
+            .bind(intent_id)
+            .bind(intent_name)
+            .bind(serde_json::to_string(&vectors.0)?)
+            .execute(DATA_SOURCE.get().unwrap())
+            .await?
+            .last_insert_rowid();
+        let sql = format!(
+            "CREATE VIRTUAL TABLE IF NOT EXISTS {} USING vec0 (
+                -- id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                intent_id TEXT NOT NULL,
+                intent_name TEXT NOT NULL,
+                vectors float[{}]
+            );
+            INSERT INTO {} (rowid, intent_id, intent_name, vectors)VALUES(?, ?, ?, ?)",
+            //  ON CONFLICT(rowid) DO UPDATE SET vectors = excluded.vectors;
+            robot_id,
+            vectors.0.len(),
+            robot_id
+        );
+        sqlx::query::<Sqlite>(&sql)
+            .bind(last_insert_rowid)
+            .bind(intent_id)
+            .bind(intent_name)
+            .bind(serde_json::to_string(&vectors.0)?)
+            .execute(DATA_SOURCE.get().unwrap())
+            .await?;
+        last_insert_rowid
+    } else {
+        let sql = format!("UPDATE {} SET vectors = ? WHERE = ?", robot_id);
+        let vec_row_id = vec_row_id.unwrap();
+        sqlx::query::<Sqlite>(&sql)
+            .bind(serde_json::to_string(&vectors.0)?)
+            .bind(vec_row_id)
+            .execute(DATA_SOURCE.get().unwrap())
+            .await?;
+        vec_row_id
+    };
     Ok(last_insert_rowid)
 }
 
@@ -171,25 +203,13 @@ pub(crate) async fn batch_add(
     robot_id: &str,
     intent_id: &str,
     intent_name: &str,
-    vectors: &Vec<Vec<f32>>,
-) -> Result<Vec<i64>> {
+    phrases: &Vec<IntentPhraseData>,
+) -> Result<()> {
     // check_datasource(robot_id, intent_id).await?;
-    let sql = format!(
-        "INSERT INTO {} (intent_id, intent_name, vectors)VALUES(?, ?, ?)",
-        robot_id
-    );
-    let mut ids: Vec<i64> = Vec::with_capacity(vectors.len());
-    for v in vectors.iter() {
-        let last_insert_rowid = sqlx::query::<Sqlite>(&sql)
-            .bind(intent_id)
-            .bind(intent_name)
-            .bind(serde_json::to_string(v)?)
-            .execute(DATA_SOURCE.get().unwrap())
-            .await?
-            .last_insert_rowid();
-        ids.push(last_insert_rowid);
+    for p in phrases.iter() {
+        add(robot_id, Some(p.id), intent_id, intent_name, &p.phrase).await?;
     }
-    Ok(ids)
+    Ok(())
 }
 
 pub(crate) async fn remove(robot_id: &str, id: i64) -> Result<()> {
@@ -210,7 +230,7 @@ pub(crate) async fn remove_by_intent_id(robot_id: &str, intent_id: &str) -> Resu
     Ok(())
 }
 
-pub(crate) async fn remove_table(robot_id: &str) -> Result<()> {
+pub(crate) async fn remove_tables(robot_id: &str) -> Result<()> {
     let sql = format!("DROP TABLE {}", robot_id);
     sqlx::query::<Sqlite>(&sql)
         .execute(DATA_SOURCE.get().unwrap())

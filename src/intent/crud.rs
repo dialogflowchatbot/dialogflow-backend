@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::vec::Vec;
 
-use axum::debug_handler;
 use axum::extract::Query;
 use axum::response::IntoResponse;
 use axum::Json;
@@ -44,14 +43,19 @@ pub(crate) fn init(robot_id: &str, is_en: bool) -> Result<()> {
     };
     let regexes: Vec<&str> = vec![];
     let mut intent = Intent::new(if is_en { "Positive" } else { "肯定" });
-    let intent_detail = IntentDetail {
-        intent_idx: 0,
-        intent_id: intent.id.clone(),
-        intent_name: intent.name.clone(),
-        keywords: keywords.into_iter().map(|s| String::from(s)).collect(),
-        regexes: regexes.into_iter().map(|s| String::from(s)).collect(),
-        phrases: vec![],
-    };
+    let mut intent_detail = IntentDetail::new(1, intent.id.clone(), intent.name.clone());
+    let mut v = keywords.into_iter().map(|s| String::from(s)).collect();
+    intent_detail.keywords.append(&mut v);
+    let mut v = regexes.into_iter().map(|s| String::from(s)).collect();
+    intent_detail.regexes.append(&mut v);
+    // let intent_detail = IntentDetail {
+    //     intent_idx: 0,
+    //     intent_id: intent.id.clone(),
+    //     intent_name: intent.name.clone(),
+    //     keywords: keywords.into_iter().map(|s| String::from(s)).collect(),
+    //     regexes: regexes.into_iter().map(|s| String::from(s)).collect(),
+    //     phrases: vec![],
+    // };
     intent.keyword_num = intent_detail.keywords.len();
     intent.regex_num = intent_detail.regexes.len();
 
@@ -119,14 +123,19 @@ pub(crate) fn init(robot_id: &str, is_en: bool) -> Result<()> {
     };
     let regexes: Vec<&str> = vec![];
     let mut intent = Intent::new(if is_en { "Negative" } else { "否定" });
-    let intent_detail = IntentDetail {
-        intent_idx: 1,
-        intent_id: intent.id.clone(),
-        intent_name: intent.name.clone(),
-        keywords: keywords.into_iter().map(|s| String::from(s)).collect(),
-        regexes: regexes.into_iter().map(|s| String::from(s)).collect(),
-        phrases: vec![],
-    };
+    let mut intent_detail = IntentDetail::new(1, intent.id.clone(), intent.name.clone());
+    let mut v = keywords.into_iter().map(|s| String::from(s)).collect();
+    intent_detail.keywords.append(&mut v);
+    let mut v = regexes.into_iter().map(|s| String::from(s)).collect();
+    intent_detail.regexes.append(&mut v);
+    // let intent_detail = IntentDetail {
+    //     intent_idx: 1,
+    //     intent_id: intent.id.clone(),
+    //     intent_name: intent.name.clone(),
+    //     keywords: keywords.into_iter().map(|s| String::from(s)).collect(),
+    //     regexes: regexes.into_iter().map(|s| String::from(s)).collect(),
+    //     phrases: vec![],
+    // };
     intent.keyword_num = intent_detail.keywords.len();
     intent.regex_num = intent_detail.regexes.len();
 
@@ -173,14 +182,7 @@ fn add_intent(robot_id: &str, intent_name: &str) -> Result<()> {
     // db::write(TABLE, INTENT_LIST_KEY, &intents)?;
     db_executor!(db::write, robot_id, TABLE_SUFFIX, INTENT_LIST_KEY, &intents)?;
 
-    let intent_detail = IntentDetail {
-        intent_idx,
-        intent_id: intent.id.clone(),
-        intent_name: intent.name.clone(),
-        keywords: vec![],
-        regexes: vec![],
-        phrases: vec![],
-    };
+    let intent_detail = IntentDetail::new(intent_idx, intent.id.clone(), intent.name.clone());
     // db::write(TABLE, intent.id.as_str(), &intent_detail)?;
     // Ok(())
     db_executor!(
@@ -193,7 +195,7 @@ fn add_intent(robot_id: &str, intent_name: &str) -> Result<()> {
 }
 
 pub(crate) async fn remove(Json(params): Json<IntentFormData>) -> impl IntoResponse {
-    let r = crate::db::embedding::remove_by_intent_id(&params.robot_id, params.id.as_str())
+    let r = super::phrase::remove_by_intent_id(&params.robot_id, params.id.as_str())
         .await
         .and_then(|_| {
             db_executor!(
@@ -375,7 +377,56 @@ pub(crate) async fn remove_regex(Json(params): Json<IntentFormData>) -> impl Int
     to_res(r)
 }
 
-#[debug_handler]
+#[axum::debug_handler]
+pub(crate) async fn add_phrase(
+    Query(query): Query<IntentFormData>,
+    Json(params): Json<IntentFormData>,
+) -> impl IntoResponse {
+    let intent_id = params.id.as_str();
+    let phrase = &params.data;
+    let r: Result<Option<IntentDetail>> =
+        db_executor!(db::query, &params.robot_id, TABLE_SUFFIX, intent_id);
+    if r.is_err() {
+        return to_res(r.map(|_| ()));
+    }
+    let r = r.unwrap();
+    if r.is_none() {
+        return to_res(Err(Error::ErrorWithMessage(String::from(
+            "Can NOT find intention detail",
+        ))));
+    }
+    let mut d = r.unwrap();
+    let r = super::phrase::add(&params.robot_id, None, intent_id, &d.intent_name, phrase)
+        .await
+        .map_err(|e| {
+            log::error!("{:#?}", &e);
+            Error::ErrorWithMessage(String::from("Invalid idx parameter."))
+        })
+        .and_then(|vec_row_id| {
+            query
+                .data
+                .parse::<usize>()
+                .map_err(|e| {
+                    log::error!("{:#?}", &e);
+                    Error::ErrorWithMessage(String::from("Invalid idx parameter."))
+                })
+                .and_then(|idx| {
+                    d.phrases.push(IntentPhraseData {
+                        id: vec_row_id,
+                        phrase: String::from(params.data.as_str()),
+                    });
+                    change_num(
+                        &params.robot_id,
+                        intent_id,
+                        &mut d,
+                        |i: &mut Vec<Intent>| i[idx].phrase_num = i[idx].phrase_num + 1,
+                    )
+                })
+        });
+    to_res(r)
+}
+
+/*
 pub(crate) async fn add_phrase(
     Query(query): Query<IntentFormData>,
     Json(params): Json<IntentFormData>,
@@ -417,10 +468,11 @@ pub(crate) async fn add_phrase(
         });
     to_res(r)
 }
+*/
 
 pub(crate) async fn remove_phrase(Json(params): Json<IntentFormData>) -> impl IntoResponse {
     let r = params.data.parse::<usize>();
-    let idx = match r {
+    let phrase_idx = match r {
         Ok(n) => n,
         Err(e) => {
             log::error!("{:?}", e);
@@ -434,17 +486,17 @@ pub(crate) async fn remove_phrase(Json(params): Json<IntentFormData>) -> impl In
         db_executor!(db::query, &params.robot_id, TABLE_SUFFIX, key);
     if let Ok(result) = r {
         if let Some(mut d) = result {
-            let phrase = d.phrases.remove(idx);
-            let r = crate::db::embedding::remove(&params.robot_id, phrase.id).await;
+            let phrase = d.phrases.remove(phrase_idx);
+            let r = super::phrase::remove(&params.robot_id, phrase.id).await;
             if let Err(e) = r {
                 return to_res(Err(e));
             }
-            let idx = d.intent_idx;
+            let intent_idx = d.intent_idx;
             return to_res(change_num(
                 &params.robot_id,
                 key,
                 &mut d,
-                |i: &mut Vec<Intent>| i[idx].phrase_num = i[idx].phrase_num - 1,
+                |i: &mut Vec<Intent>| i[intent_idx].phrase_num = i[intent_idx].phrase_num - 1,
             ));
         }
     }
@@ -498,8 +550,8 @@ pub(crate) async fn regenerate_embeddings(
         ))));
     }
     let d = r.unwrap();
-    let array: Vec<&str> = d.phrases.iter().map(|v| v.phrase.as_ref()).collect();
-    let r = detector::save_intent_embeddings(&params.robot_id, &params.data, &d.intent_name, array)
-        .await;
+    // let array: Vec<&str> = d.phrases.iter().map(|v| v.phrase.as_ref()).collect();
+    let r =
+        super::phrase::batch_add(&params.robot_id, &params.data, &d.intent_name, &d.phrases).await;
     to_res(r)
 }
