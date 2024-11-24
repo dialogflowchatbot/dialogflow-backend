@@ -26,59 +26,11 @@ fn get_sqlite_path() -> std::path::PathBuf {
 }
 
 pub(crate) async fn init_datasource() -> Result<()> {
-    unsafe {
-        libsqlite3_sys::sqlite3_auto_extension(Some(std::mem::transmute(
-            sqlite_vec::sqlite3_vec_init as *const (),
-        )));
-    }
-
-    match OpenOptions::new()
-        .read(false)
-        .write(true)
-        .create(true)
-        .open(get_sqlite_path().as_path())
-    {
-        Ok(_f) => {}
-        // Err(e: ErrorKind::NotFound) => None,
-        Err(e) => {
-            return Err(Error::ErrorWithMessage(format!(
-                "Created database file failed, err: {:?}",
-                &e
-            )))
-        }
-    };
-    let pool_ops = PoolOptions::<Sqlite>::new()
-        .min_connections(1)
-        .max_connections(100)
-        .acquire_timeout(Duration::from_secs(5))
-        .test_before_acquire(true);
-    let path = get_sqlite_path();
-    if path.is_dir() {
-        return Err(Error::ErrorWithMessage(String::from(
-            "Created database file failed, there is a directory called: ipev.dat",
-        )));
-    }
-    let s = format!("sqlite://{}?mode=rw", path.display());
-    let conn_str = s.replace("\\", "/");
-    // log::info!("Embedding database path: {}", &conn_str);
-    let pool = pool_ops.connect(conn_str.as_str()).await?;
+    let p = get_sqlite_path();
+    let pool = crate::db::init_sqlite_datasource(p.as_path()).await?;
     DATA_SOURCE
         .set(pool)
         .map_err(|_| Error::ErrorWithMessage(String::from("Datasource has been set.")))
-    /*
-    下面这个不会打印，解决：
-    1、把map换成for_each
-    2、由于map是lazy的，所以需要在map后面加.collect()
-     */
-    /*
-    match sqlite_get_list::<Tag>("SELECT id, name FROM blog_tag ORDER BY id DESC", None).await {
-        Ok(tags) => tags.iter().map(|tag| {
-            println!("{}", &tag.name);
-            tag::put_id_name(tag.id, &tag.name);
-        }),
-        Err(e) => panic!("{:?}", e),
-    };
-    */
 }
 
 pub async fn shutdown_db() {
@@ -104,7 +56,7 @@ pub(crate) async fn init_tables(robot_id: &str) -> Result<()> {
     // println!("Init database");
     // let ddl = include_str!("./embedding_ddl.sql");
     let sql = format!(
-        "CREATE TABLE {}_row_id (
+        "CREATE TABLE {}_vec_row_id (
             id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT
             -- intent_id TEXT NOT NULL,
         );",
@@ -157,11 +109,8 @@ pub(crate) async fn add(
     }
     log::info!("vectors.0.len() = {}", vectors.0.len());
     let last_insert_rowid = if vec_row_id.is_none() {
-        let sql = format!("INSERT INTO {}_row_id (id)VALUES(NULL)", robot_id);
+        let sql = format!("INSERT INTO {}_vec_row_id (id)VALUES(NULL)", robot_id);
         let last_insert_rowid = sqlx::query::<Sqlite>(&sql)
-            .bind(intent_id)
-            .bind(intent_name)
-            .bind(serde_json::to_string(&vectors.0)?)
             .execute(DATA_SOURCE.get().unwrap())
             .await?
             .last_insert_rowid();
@@ -169,7 +118,7 @@ pub(crate) async fn add(
             "CREATE VIRTUAL TABLE IF NOT EXISTS {} USING vec0 (
                 -- id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
                 intent_id TEXT NOT NULL,
-                intent_name TEXT NOT NULL,
+                +intent_name TEXT NOT NULL,
                 vectors float[{}]
             );
             INSERT INTO {} (rowid, intent_id, intent_name, vectors)VALUES(?, ?, ?, ?)",

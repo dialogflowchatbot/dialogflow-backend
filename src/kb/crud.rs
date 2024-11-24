@@ -3,9 +3,11 @@ use std::path::Path;
 use axum::{
     extract::{Multipart, Query},
     response::IntoResponse,
+    Json,
 };
 
 use super::doc;
+use super::dto::QuestionAnswersPair;
 use crate::result::{Error, Result};
 use crate::robot::dto::RobotQuery;
 use crate::web::server::to_res;
@@ -61,4 +63,10 @@ async fn do_uploading(robot_id: &str, mut multipart: Multipart) -> Result<()> {
     }
 }
 
-pub(crate) async fn new_qa() -> impl IntoResponse {}
+pub(crate) async fn add_qa(
+    Query(q): Query<RobotQuery>,
+    Json(d): Json<QuestionAnswersPair>,
+) -> impl IntoResponse {
+    let r = super::qa::add(&q.robot_id, d).await;
+    to_res(r)
+}

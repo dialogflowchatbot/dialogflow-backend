@@ -59,9 +59,23 @@ fn get_lang() -> String {
 // }
 
 pub async fn start_app() {
+    unsafe {
+        libsqlite3_sys::sqlite3_auto_extension(Some(std::mem::transmute(
+            sqlite_vec::sqlite3_vec_init as *const (),
+        )));
+    }
+
     crate::intent::phrase::init_datasource()
         .await
-        .expect("Failed initialize vector database.");
+        .expect("Failed initialize intent phrase vector database.");
+
+    crate::kb::qa::init_datasource()
+        .await
+        .expect("Failed initialize knowledge base QnA vector database.");
+
+    crate::kb::doc::init_datasource()
+        .await
+        .expect("Failed initialize knowledge base QnA vector database.");
 
     let settings = {
         let mut s = crate::db::init().await.expect("Initialize database failed");
@@ -359,6 +373,8 @@ async fn shutdown_signal(sender: tokio::sync::oneshot::Sender<()>) {
     };
 
     crate::intent::phrase::shutdown_db().await;
+    crate::kb::qa::shutdown_db().await;
+    crate::kb::doc::shutdown_db().await;
 
     let m = if *IS_EN {
         "This program has been terminated"
