@@ -247,6 +247,7 @@ fn gen_router() -> Router {
             "/management/settings/model/check/embedding",
             get(settings::check_embedding_model),
         )
+        .route("/kb/qa", post(kb::add_qa))
         .route("/kb/doc/upload", post(kb::upload))
         .route("/management/settings/smtp/test", post(settings::smtp_test))
         .route("/flow/answer", post(rt::answer))

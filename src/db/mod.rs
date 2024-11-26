@@ -28,6 +28,42 @@ macro_rules! db_executor (
     });
 );
 
+#[macro_export]
+macro_rules! sqlite_trans {
+    (fn $fn_name:ident($($arg: ident: $typ: ty),*) -> $rt: ty $body: block) => {
+        paste::item! {
+            #[inline(always)]
+            async fn [<exec_ $fn_name>](robot_id: &str, $($arg: $typ,)* transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,) -> $rt {
+                $body
+            }
+            pub(crate) async fn $fn_name(robot_id: &str, $($arg: $typ,)*) -> $rt {
+                let mut transaction = DATA_SOURCE.get().unwrap().begin().await?;
+                let r = [<exec_ $fn_name>](robot_id, $($arg,)* &mut transaction).await;
+                if r.is_ok() {
+                    transaction.commit().await?;
+                } else {
+                    transaction.rollback().await?;
+                }
+                r
+            }
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! sqlite_trans2 {
+    ($func: expr, $pool: expr, $($bind: expr),*) => {
+        let mut transaction = $pool.begin().await;
+        let r = $func($(,($bind))*).await;
+        if r.is_ok() {
+            transaction.commit().await;
+        } else {
+            transaction.rollback().await?;
+        }
+        r
+    };
+}
+
 pub(crate) static DB: LazyLock<Database> = LazyLock::new(|| {
     let data_folder = std::path::Path::new(".").join("data");
     if !data_folder.exists() {

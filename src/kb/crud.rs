@@ -8,9 +8,12 @@ use axum::{
 
 use super::doc;
 use super::dto::QuestionAnswersPair;
-use crate::result::{Error, Result};
 use crate::robot::dto::RobotQuery;
 use crate::web::server::to_res;
+use crate::{
+    result::{Error, Result},
+    sqlite_trans,
+};
 
 pub(crate) async fn upload(Query(q): Query<RobotQuery>, multipart: Multipart) -> impl IntoResponse {
     if let Err(e) = do_uploading(&q.robot_id, multipart).await {
@@ -68,5 +71,6 @@ pub(crate) async fn add_qa(
     Json(d): Json<QuestionAnswersPair>,
 ) -> impl IntoResponse {
     let r = super::qa::add(&q.robot_id, d).await;
+    // let r = sqlite_trans!(super::qa::add, &q.robot_id, d).await;
     to_res(r)
 }

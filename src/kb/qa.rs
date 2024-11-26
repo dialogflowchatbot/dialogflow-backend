@@ -15,6 +15,7 @@ use sqlx::{pool::PoolOptions, Row, Sqlite};
 use super::dto::{QuestionAnswersPair, QuestionData};
 use crate::ai::embedding::embedding;
 use crate::result::{Error, Result};
+use crate::sqlite_trans;
 
 type SqliteConnPool = sqlx::Pool<Sqlite>;
 
@@ -86,7 +87,31 @@ pub(crate) async fn init_tables(robot_id: &str) -> Result<()> {
     Ok(())
 }
 
-pub(crate) async fn add(robot_id: &str, mut d: QuestionAnswersPair) -> Result<String> {
+// sqlite_trans!(
+//     fn dq(    robot_id: &str,
+//         mut d: QuestionAnswersPair,
+//         transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,) -> Result<String> {
+//         Ok(String::new())
+//     }
+// );
+
+pub(crate) async fn add(robot_id: &str, d: QuestionAnswersPair) -> Result<String> {
+    let ds = DATA_SOURCE.get().unwrap();
+    let mut transaction = ds.begin().await?;
+    let r = add2(robot_id, d, &mut transaction).await;
+    if r.is_ok() {
+        transaction.commit().await?;
+    } else {
+        transaction.rollback().await?;
+    }
+    r
+}
+
+async fn add2(
+    robot_id: &str,
+    mut d: QuestionAnswersPair,
+    transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+) -> Result<String> {
     let mut questions: Vec<&mut QuestionData> = Vec::with_capacity(5);
     questions.push(&mut d.question);
     if d.similar_questions.is_some() {
@@ -107,7 +132,7 @@ pub(crate) async fn add(robot_id: &str, mut d: QuestionAnswersPair) -> Result<St
         if q.vec_row_id.is_none() {
             let sql = format!("INSERT INTO {}_vec_row_id (id)VALUES(NULL)", robot_id);
             let last_insert_rowid = sqlx::query::<Sqlite>(&sql)
-                .execute(DATA_SOURCE.get().unwrap())
+                .execute(&mut **transaction)
                 .await?
                 .last_insert_rowid();
             let sql = format!(
@@ -125,7 +150,7 @@ pub(crate) async fn add(robot_id: &str, mut d: QuestionAnswersPair) -> Result<St
                 .bind(last_insert_rowid)
                 .bind(&qa_id)
                 .bind(serde_json::to_string(&vectors.0)?)
-                .execute(DATA_SOURCE.get().unwrap())
+                .execute(&mut **transaction)
                 .await?;
             q.vec_row_id = Some(last_insert_rowid);
         } else {
@@ -134,7 +159,7 @@ pub(crate) async fn add(robot_id: &str, mut d: QuestionAnswersPair) -> Result<St
             sqlx::query::<Sqlite>(&sql)
                 .bind(serde_json::to_string(&vectors.0)?)
                 .bind(vec_row_id)
-                .execute(DATA_SOURCE.get().unwrap())
+                .execute(&mut **transaction)
                 .await?;
         };
     }
@@ -146,7 +171,7 @@ pub(crate) async fn add(robot_id: &str, mut d: QuestionAnswersPair) -> Result<St
         .bind(&qa_id)
         .bind(serde_json::to_string(&d)?)
         .bind(0)
-        .execute(DATA_SOURCE.get().unwrap())
+        .execute(&mut **transaction)
         .await?;
     Ok(qa_id)
 }

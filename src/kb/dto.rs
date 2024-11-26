@@ -3,7 +3,7 @@ use std::vec::Vec;
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Serialize)]
-pub(super) struct QuestionAnswersPair {
+pub(crate) struct QuestionAnswersPair {
     pub(super) question: QuestionData,
     pub(super) similar_questions: Option<Vec<QuestionData>>,
     pub(super) answer: String,
