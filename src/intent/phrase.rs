@@ -66,7 +66,7 @@ pub(crate) async fn init_tables(robot_id: &str) -> Result<()> {
     let mut stream = sqlx::raw_sql(&sql).execute_many(DATA_SOURCE.get().unwrap());
     while let Some(res) = stream.next().await {
         match res {
-            Ok(_r) => log::info!("Initialized intent table"),
+            Ok(_r) => log::info!("Initialized phrase table"),
             Err(e) => log::error!("Create table failed, err: {:?}", e),
         }
     }

@@ -28,6 +28,7 @@ macro_rules! db_executor (
     });
 );
 
+/*
 #[macro_export]
 macro_rules! sqlite_trans {
     (fn $fn_name:ident($($arg: ident: $typ: ty),*) -> $rt: ty $body: block) => {
@@ -63,6 +64,7 @@ macro_rules! sqlite_trans2 {
         r
     };
 }
+*/
 
 pub(crate) static DB: LazyLock<Database> = LazyLock::new(|| {
     let data_folder = std::path::Path::new(".").join("data");
