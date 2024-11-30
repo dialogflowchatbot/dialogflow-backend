@@ -349,7 +349,7 @@ pub(crate) struct LlmChatNode {
     #[serde(rename = "exitCondition")]
     pub(crate) exit_condition: crate::flow::rt::node::LlmChatNodeExitCondition,
     #[serde(rename = "whenTimeoutThen")]
-    pub(crate) when_timeout_then: crate::flow::rt::node::LlmChatNodeWhenTimeoutThen,
+    pub(crate) when_timeout_then: crate::flow::rt::node::LlmChatAnswerTimeoutThen,
     #[serde(rename = "responseStreaming")]
     pub(crate) response_streaming: bool,
     pub(crate) branches: Vec<Branch>,

@@ -694,7 +694,7 @@ pub(crate) fn check_model_files(info: &HuggingFaceModelInfo) -> Result<()> {
                 .open(&f)?;
             let mut bytes = Vec::with_capacity(4096);
             file.read_to_end(&mut bytes)?;
-            let _ = serde_json::from_slice(&bytes)?;
+            let _: serde::de::IgnoredAny = serde_json::from_slice(&bytes)?;
         } else if ext.eq("safetensors") {
             let metadata = std::fs::metadata(&p)?;
             if metadata.len() < 62914560u64 {

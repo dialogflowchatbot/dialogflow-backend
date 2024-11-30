@@ -2,19 +2,20 @@ use std::vec::Vec;
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Deserialize, Serialize)]
-pub(crate) struct QuestionAnswerData {
-    pub(super) id: String,
-    #[serde(rename = "qaData")]
-    pub(super) qa_data: QuestionAnswerPair,
-}
+// #[derive(Deserialize, Serialize)]
+// pub(crate) struct QuestionAnswerData {
+//     pub(super) id: Option<String>,
+//     #[serde(rename = "qaData")]
+//     pub(super) qa_data: QuestionAnswerPair,
+// }
 
 #[derive(Deserialize, Serialize)]
 pub(crate) struct QuestionAnswerPair {
+    pub(super) id: Option<String>,
     pub(super) question: QuestionData,
     #[serde(rename = "similarQuestions")]
-    pub(super) similar_questions: Option<Vec<QuestionData>>,
-    pub(super) answer: String,
+    pub(super) similar_questions: Vec<QuestionData>,
+    pub(crate) answer: String,
 }
 
 #[derive(Deserialize, Serialize)]

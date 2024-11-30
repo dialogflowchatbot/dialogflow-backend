@@ -79,7 +79,7 @@ pub(crate) async fn init_tables(robot_id: &str) -> Result<()> {
 
 pub(crate) async fn search(robot_id: &str, vectors: &Vec<f32>) -> Result<Vec<(String, f64)>> {
     let sql = format!(
-        "SELECT intent_id, intent_name, distance FROM {} WHERE vectors MATCH ? ORDER BY distance LIMIT 1",
+        "SELECT intent_id, intent_name, distance FROM {} WHERE vectors MATCH ? ORDER BY distance ASC LIMIT 1",
         robot_id
     );
     let results = sqlx::query::<Sqlite>(&sql)

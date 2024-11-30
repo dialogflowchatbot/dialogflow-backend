@@ -172,7 +172,7 @@ fn convert_node(main_flow_id: &str, node: &mut Node) -> Result<()> {
                 context_len: n.context_length,
                 cur_run_times: 0,
                 exit_condition: n.exit_condition.clone(),
-                when_timeout_then: n.when_timeout_then.clone(),
+                answer_timeout_then: n.when_timeout_then.clone(),
                 streaming: n.response_streaming,
                 connect_timeout: n.connect_timeout,
                 read_timeout: n.read_timeout,

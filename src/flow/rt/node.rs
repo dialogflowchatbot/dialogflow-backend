@@ -373,7 +373,7 @@ pub(crate) enum LlmChatNodeExitCondition {
 
 #[derive(Archive, Clone, Deserialize, Serialize, serde::Deserialize)]
 #[rkyv(compare(PartialEq))]
-pub(crate) enum LlmChatNodeWhenTimeoutThen {
+pub(crate) enum LlmChatAnswerTimeoutThen {
     GotoAnotherNode,
     ResponseAlternateText(String),
     DoNothing,
@@ -386,7 +386,7 @@ pub(crate) struct LlmChatNode {
     pub(super) context_len: u8,
     pub(super) cur_run_times: u8,
     pub(super) exit_condition: LlmChatNodeExitCondition,
-    pub(super) when_timeout_then: LlmChatNodeWhenTimeoutThen,
+    pub(super) answer_timeout_then: LlmChatAnswerTimeoutThen,
     pub(super) streaming: bool,
     pub(crate) connect_timeout: Option<u32>,
     pub(crate) read_timeout: Option<u32>,
@@ -474,14 +474,14 @@ impl RuntimeNode for LlmChatNode {
                 ))
             }) {
                 log::error!("LlmChatNode response failed, err: {:?}", &e);
-                match &self.when_timeout_then {
-                    LlmChatNodeWhenTimeoutThen::GotoAnotherNode => {
+                match &self.answer_timeout_then {
+                    LlmChatAnswerTimeoutThen::GotoAnotherNode => {
                         ctx.node = None;
                         add_next_node(ctx, &self.next_node_id);
                         return false;
                     }
-                    LlmChatNodeWhenTimeoutThen::ResponseAlternateText(t) => s.push_str(t),
-                    LlmChatNodeWhenTimeoutThen::DoNothing => return false,
+                    LlmChatAnswerTimeoutThen::ResponseAlternateText(t) => s.push_str(t),
+                    LlmChatAnswerTimeoutThen::DoNothing => return false,
                 }
             }
             log::info!("LLM response |{}|", &s);
@@ -533,6 +533,62 @@ impl RuntimeNode for LlmChatNode {
             //     });
             // }
             true
+        }
+    }
+}
+
+#[derive(Archive, Clone, Deserialize, Serialize, serde::Deserialize)]
+#[rkyv(compare(PartialEq))]
+pub(crate) enum KnowledgeBaseAnswerNoRecallThen {
+    GotoAnotherNode,
+    ReturnAlternativeAnswerInstead(String),
+}
+
+#[derive(Archive, Clone, Deserialize, Serialize)]
+#[rkyv(compare(PartialEq))]
+pub(crate) struct KnowledgeBaseAnswerNode {
+    pub(super) recall_thresholds: f64,
+    pub(super) no_recall_then: KnowledgeBaseAnswerNoRecallThen,
+    pub(super) alternative_answer: String,
+    pub(super) next_node_id: String,
+}
+
+impl RuntimeNode for KnowledgeBaseAnswerNode {
+    fn exec(&mut self, req: &Request, ctx: &mut Context, response: &mut Response) -> bool {
+        // log::info!("Into LlmChaKnowledgeBaseAnswerNodetNode");
+        let result = tokio::runtime::Handle::current().block_on(crate::kb::qa::retrieve_answer(
+            &req.robot_id,
+            &req.user_input,
+        ));
+        match result {
+            Ok((answer, thresholds)) => {
+                if answer.is_some() && thresholds >= self.recall_thresholds {
+                    response.answers.push(AnswerData {
+                        text: answer.unwrap().answer,
+                        answer_type: AnswerType::TextPlain,
+                    });
+                    true
+                } else {
+                    match &self.no_recall_then {
+                        KnowledgeBaseAnswerNoRecallThen::GotoAnotherNode => {
+                            add_next_node(ctx, &self.next_node_id);
+                            false
+                        }
+                        KnowledgeBaseAnswerNoRecallThen::ReturnAlternativeAnswerInstead(s) => {
+                            response.answers.push(AnswerData {
+                                text: s.clone(),
+                                answer_type: AnswerType::TextPlain,
+                            });
+                            true
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                log::error!("KnowledgeBaseAnswerNode answer failed: {:?}", &e);
+                add_next_node(ctx, &self.next_node_id);
+                false
+            }
         }
     }
 }

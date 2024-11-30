@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::Path;
 
 use axum::{
@@ -12,14 +13,17 @@ use crate::result::{Error, Result};
 use crate::robot::dto::RobotQuery;
 use crate::web::server::to_res;
 
-pub(crate) async fn upload(Query(q): Query<RobotQuery>, multipart: Multipart) -> impl IntoResponse {
-    if let Err(e) = do_uploading(&q.robot_id, multipart).await {
+pub(crate) async fn upload_doc(
+    Query(q): Query<RobotQuery>,
+    multipart: Multipart,
+) -> impl IntoResponse {
+    if let Err(e) = upload_doc_inner(&q.robot_id, multipart).await {
         return to_res(Err(e));
     }
     to_res(Ok(()))
 }
 
-async fn do_uploading(robot_id: &str, mut multipart: Multipart) -> Result<()> {
+async fn upload_doc_inner(robot_id: &str, mut multipart: Multipart) -> Result<()> {
     let p = Path::new(".")
         .join("data")
         .join(robot_id)
@@ -68,11 +72,32 @@ pub(crate) async fn list_qa(Query(q): Query<RobotQuery>) -> impl IntoResponse {
     to_res(r)
 }
 
-pub(crate) async fn add_qa(
+pub(crate) async fn save_qa(
     Query(q): Query<RobotQuery>,
     Json(d): Json<QuestionAnswerPair>,
 ) -> impl IntoResponse {
-    let r = super::qa::add(&q.robot_id, d).await;
+    let r = super::qa::save(&q.robot_id, d).await;
     // let r = sqlite_trans!(super::qa::add, &q.robot_id, d).await;
+    to_res(r)
+}
+
+pub(crate) async fn delete_qa(
+    Query(q): Query<RobotQuery>,
+    Json(d): Json<QuestionAnswerPair>,
+) -> impl IntoResponse {
+    let r = super::qa::delete(&q.robot_id, d).await;
+    to_res(r)
+}
+
+pub(crate) async fn qa_dryrun(Query(q): Query<HashMap<String, String>>) -> impl IntoResponse {
+    let r = q.get("robotId");
+    let t = q.get("text");
+    if r.is_none() || t.is_none() {
+        let res = Err(Error::ErrorWithMessage(String::from(
+            "robotId or text was missing.",
+        )));
+        return to_res(res);
+    }
+    let r = super::qa::retrieve_answer(r.unwrap(), t.unwrap()).await;
     to_res(r)
 }
