@@ -33,7 +33,7 @@ candle-transformers = { version = "0.8" }
 # candle-transformers = { version = "0.8", features = ["flash-attn"] }
 # crossbeam-channel = "0.5"
 frand = "0.10"
-tokenizers = "0.20"
+tokenizers = "0.21"
 # candle_embed = "0.1"
 colored = "2.1"
 # dashmap = "5.5.1"
