@@ -61,8 +61,8 @@ pub(crate) async fn init_tables(robot_id: &str) -> Result<()> {
             qa_data TEXT NOT NULL,
             created_at INTEGER NOT NULL
         );
-        CREATE INDEX idx_created_at ON {}_qa (created_at);",
-        robot_id, robot_id, robot_id
+        CREATE INDEX idx_{}_created_at ON {}_qa (created_at);",
+        robot_id, robot_id, robot_id, robot_id
     );
     // log::info!("sql = {}", &sql);
     let mut stream = sqlx::raw_sql(&sql).execute_many(DATA_SOURCE.get().unwrap());

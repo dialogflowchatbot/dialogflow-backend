@@ -63,6 +63,7 @@ pub(crate) enum Node {
     ExternalHttpNode(ExternalHttpNode),
     SendEmailNode(SendEmailNode),
     EndNode(EndNode),
+    KnowledgeBaseAnswerNode(KnowledgeBaseAnswerNode),
 }
 
 impl Node {
@@ -214,6 +215,23 @@ impl Node {
                     Ok(())
                 }
             }
+            Node::KnowledgeBaseAnswerNode(n) => {
+                let t = "Knowledge answer";
+                if !n.valid {
+                    Self::err(f, t, &n.node_name, "verification failed")
+                } else if n.node_name.is_empty() {
+                    Self::err(f, t, &n.node_name, "node name not filled in")
+                } else if n.recall_thresholds < 1 || n.recall_thresholds > 100 {
+                    Self::err(
+                        f,
+                        t,
+                        &n.node_name,
+                        "recall thresholds must between 1 and 100",
+                    )
+                } else {
+                    Ok(())
+                }
+            }
         }
     }
 
@@ -227,6 +245,7 @@ impl Node {
             Self::ExternalHttpNode(n) => n.node_id.clone(),
             Self::SendEmailNode(n) => n.node_id.clone(),
             Self::EndNode(n) => n.node_id.clone(),
+            Self::KnowledgeBaseAnswerNode(n) => n.node_id.clone(),
         }
     }
 
@@ -263,7 +282,12 @@ impl Node {
                 n.branches
                     .iter()
                     .for_each(|b| ids.push(b.target_node_id.clone()));
-            } // _ => {}
+            }
+            Self::KnowledgeBaseAnswerNode(n) => {
+                n.branches
+                    .iter()
+                    .for_each(|b| ids.push(b.target_node_id.clone()));
+            }
         };
         ids
     }
@@ -276,7 +300,8 @@ impl Node {
             Self::ConditionNode(n) => Some(&mut n.branches),
             Self::CollectNode(n) => Some(&mut n.branches),
             Self::ExternalHttpNode(n) => Some(&mut n.branches),
-            Self::SendEmailNode(n) => Some(&mut n.branches), // _ => None,
+            Self::SendEmailNode(n) => Some(&mut n.branches),
+            Self::KnowledgeBaseAnswerNode(n) => Some(&mut n.branches),
         }
     }
 }
@@ -457,4 +482,18 @@ pub(crate) struct EndNode {
     pub(crate) node_name: String,
     #[serde(rename = "endingText")]
     pub(crate) ending_text: String,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct KnowledgeBaseAnswerNode {
+    pub(crate) valid: bool,
+    #[serde(rename = "nodeId")]
+    pub(crate) node_id: String,
+    #[serde(rename = "nodeName")]
+    pub(crate) node_name: String,
+    pub(crate) branches: Vec<Branch>,
+    #[serde(rename = "recallThresholds")]
+    pub(crate) recall_thresholds: u8,
+    #[serde(rename = "noAnswerThen")]
+    pub(crate) no_answer_then: crate::flow::rt::node::KnowledgeBaseAnswerNoRecallThen,
 }

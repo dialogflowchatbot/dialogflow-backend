@@ -42,6 +42,7 @@ pub(crate) enum RuntimeNnodeEnum {
     TerminateNode,
     SendEmailNode,
     LlmChatNode,
+    KnowledgeBaseAnswerNode,
 }
 
 #[enum_dispatch(RuntimeNnodeEnum)]
@@ -464,14 +465,16 @@ impl RuntimeNode for LlmChatNode {
                 } else {
                     Some(ctx.chat_history.clone())
                 };
-                tokio::runtime::Handle::current().block_on(crate::ai::chat::chat(
-                    &req.robot_id,
-                    &self.prompt,
-                    chat_history,
-                    self.connect_timeout,
-                    self.read_timeout,
-                    ResultReceiver::StrBuf(&mut s),
-                ))
+                tokio::task::block_in_place(|| {
+                    tokio::runtime::Handle::current().block_on(crate::ai::chat::chat(
+                        &req.robot_id,
+                        &self.prompt,
+                        chat_history,
+                        self.connect_timeout,
+                        self.read_timeout,
+                        ResultReceiver::StrBuf(&mut s),
+                    ))
+                })
             }) {
                 log::error!("LlmChatNode response failed, err: {:?}", &e);
                 match &self.answer_timeout_then {
@@ -541,7 +544,7 @@ impl RuntimeNode for LlmChatNode {
 #[rkyv(compare(PartialEq))]
 pub(crate) enum KnowledgeBaseAnswerNoRecallThen {
     GotoAnotherNode,
-    ReturnAlternativeAnswerInstead(String),
+    ReturnAlternateAnswerInstead(String),
 }
 
 #[derive(Archive, Clone, Deserialize, Serialize)]
@@ -549,17 +552,18 @@ pub(crate) enum KnowledgeBaseAnswerNoRecallThen {
 pub(crate) struct KnowledgeBaseAnswerNode {
     pub(super) recall_thresholds: f64,
     pub(super) no_recall_then: KnowledgeBaseAnswerNoRecallThen,
-    pub(super) alternative_answer: String,
     pub(super) next_node_id: String,
 }
 
 impl RuntimeNode for KnowledgeBaseAnswerNode {
     fn exec(&mut self, req: &Request, ctx: &mut Context, response: &mut Response) -> bool {
         // log::info!("Into LlmChaKnowledgeBaseAnswerNodetNode");
-        let result = tokio::runtime::Handle::current().block_on(crate::kb::qa::retrieve_answer(
-            &req.robot_id,
-            &req.user_input,
-        ));
+        let result = tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(crate::kb::qa::retrieve_answer(
+                &req.robot_id,
+                &req.user_input,
+            ))
+        });
         match result {
             Ok((answer, thresholds)) => {
                 if answer.is_some() && thresholds >= self.recall_thresholds {
@@ -574,7 +578,7 @@ impl RuntimeNode for KnowledgeBaseAnswerNode {
                             add_next_node(ctx, &self.next_node_id);
                             false
                         }
-                        KnowledgeBaseAnswerNoRecallThen::ReturnAlternativeAnswerInstead(s) => {
+                        KnowledgeBaseAnswerNoRecallThen::ReturnAlternateAnswerInstead(s) => {
                             response.answers.push(AnswerData {
                                 text: s.clone(),
                                 answer_type: AnswerType::TextPlain,

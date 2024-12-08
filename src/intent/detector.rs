@@ -19,6 +19,7 @@ pub(crate) async fn detect(robot_id: &str, s: &str) -> Result<Option<String>> {
         return Ok(None);
     }
     let r = op.unwrap();
+    let mut empty_phrase = true;
     for i in r.iter() {
         let r: Option<IntentDetail> = db_executor!(
             db::query,
@@ -39,7 +40,11 @@ pub(crate) async fn detect(robot_id: &str, s: &str) -> Result<Option<String>> {
                     return Ok(Some(i.name.clone()));
                 }
             }
+            empty_phrase = i.phrase_num < 1;
         }
+    }
+    if empty_phrase {
+        return Ok(None);
     }
     let embedding = embedding(robot_id, s).await?;
     if embedding.0.is_empty() {

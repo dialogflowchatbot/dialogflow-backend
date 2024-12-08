@@ -1,6 +1,7 @@
 use super::context::Context;
 use super::dto::{Request, Response};
 use crate::ai::completion::Prompt;
+use crate::flow::rt::dto::UserInputResult;
 use crate::flow::rt::node::RuntimeNode;
 use crate::intent::detector;
 use crate::result::{Error, Result};
@@ -21,7 +22,10 @@ pub(in crate::flow::rt) async fn process(req: &mut Request) -> Result<Response> 
     }
     log::info!("add_node {:?}", now.elapsed());
     let now = std::time::Instant::now();
-    if req.user_input_intent.is_none() {
+    if req.user_input_intent.is_none()
+        && req.user_input_result == UserInputResult::Successful
+        && !req.user_input.is_empty()
+    {
         req.user_input_intent = detector::detect(&req.robot_id, &req.user_input).await?;
         // println!("{:?}", req.user_input_intent);
     }

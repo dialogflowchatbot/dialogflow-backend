@@ -4,7 +4,7 @@ use std::vec::Vec;
 use super::condition::ConditionData;
 use super::node::{
     CollectNode, ConditionNode, ExternalHttpCallNode, GotoAnotherNode, GotoMainFlowNode,
-    LlmChatNode, RuntimeNnodeEnum, SendEmailNode, TerminateNode, TextNode,
+    KnowledgeBaseAnswerNode, LlmChatNode, RuntimeNnodeEnum, SendEmailNode, TerminateNode, TextNode,
 };
 use crate::db;
 use crate::db_executor;
@@ -77,6 +77,7 @@ fn check_first_node(
                     Node::ExternalHttpNode(n) => n.node_id = String::from(first_node_id),
                     Node::SendEmailNode(n) => n.node_id = String::from(first_node_id),
                     Node::EndNode(n) => n.node_id = String::from(first_node_id),
+                    Node::KnowledgeBaseAnswerNode(n) => n.node_id = String::from(first_node_id),
                 };
             }
         }
@@ -345,6 +346,17 @@ fn convert_node(main_flow_id: &str, node: &mut Node) -> Result<()> {
                 nodes.push((n.node_id.clone(), bytes));
                 nodes.push((end_node_id, ter_bytes));
             }
+        }
+        Node::KnowledgeBaseAnswerNode(n) => {
+            let node = KnowledgeBaseAnswerNode {
+                recall_thresholds: n.recall_thresholds as f64 / 100f64,
+                no_recall_then: n.no_answer_then.clone(),
+                next_node_id: n.branches[0].target_node_id.clone(),
+            };
+            let r = RuntimeNnodeEnum::KnowledgeBaseAnswerNode(node);
+            let bytes = rkyv::to_bytes::<rkyv::rancor::Error>(&r).unwrap();
+            // bytes.push(RuntimeNodeTypeId::CollectNode as u8);
+            nodes.push((n.node_id.clone(), bytes));
         }
     };
     // let mut nodes: Vec<(&str, &[u8])> = Vec::with_capacity(box_nodes.len());
