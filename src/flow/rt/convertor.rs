@@ -349,7 +349,7 @@ fn convert_node(main_flow_id: &str, node: &mut Node) -> Result<()> {
         }
         Node::KnowledgeBaseAnswerNode(n) => {
             let node = KnowledgeBaseAnswerNode {
-                recall_thresholds: n.recall_thresholds as f64 / 100f64,
+                recall_distance: 1f64 - n.recall_thresholds as f64 / 100f64,
                 no_recall_then: n.no_answer_then.clone(),
                 next_node_id: n.branches[0].target_node_id.clone(),
             };

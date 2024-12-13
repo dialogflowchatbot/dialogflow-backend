@@ -550,9 +550,30 @@ pub(crate) enum KnowledgeBaseAnswerNoRecallThen {
 #[derive(Archive, Clone, Deserialize, Serialize)]
 #[rkyv(compare(PartialEq))]
 pub(crate) struct KnowledgeBaseAnswerNode {
-    pub(super) recall_thresholds: f64,
+    pub(super) recall_distance: f64,
     pub(super) no_recall_then: KnowledgeBaseAnswerNoRecallThen,
     pub(super) next_node_id: String,
+}
+
+impl KnowledgeBaseAnswerNode {
+    fn fallback_answer(&self, ctx: &mut Context, response: &mut Response) -> bool {
+        match &self.no_recall_then {
+            KnowledgeBaseAnswerNoRecallThen::GotoAnotherNode => {
+                add_next_node(ctx, &self.next_node_id);
+                false
+            }
+            KnowledgeBaseAnswerNoRecallThen::ReturnAlternateAnswerInstead(s) => {
+                response.answers.push(AnswerData {
+                    text: s.clone(),
+                    answer_type: AnswerType::TextPlain,
+                });
+                let r = RuntimeNnodeEnum::KnowledgeBaseAnswerNode(self.clone());
+                let bytes = rkyv::to_bytes::<rkyv::rancor::Error>(&r).unwrap();
+                ctx.node = Some(bytes.into_vec());
+                true
+            }
+        }
+    }
 }
 
 impl RuntimeNode for KnowledgeBaseAnswerNode {
@@ -565,33 +586,26 @@ impl RuntimeNode for KnowledgeBaseAnswerNode {
             ))
         });
         match result {
-            Ok((answer, thresholds)) => {
-                if answer.is_some() && thresholds >= self.recall_thresholds {
+            Ok((answer, distance)) => {
+                log::info!(
+                    "distance {} recall_distance {}",
+                    distance,
+                    self.recall_distance
+                );
+                if answer.is_some() && distance <= self.recall_distance {
                     response.answers.push(AnswerData {
                         text: answer.unwrap().answer,
                         answer_type: AnswerType::TextPlain,
                     });
-                    true
+                    add_next_node(ctx, &self.next_node_id);
+                    false
                 } else {
-                    match &self.no_recall_then {
-                        KnowledgeBaseAnswerNoRecallThen::GotoAnotherNode => {
-                            add_next_node(ctx, &self.next_node_id);
-                            false
-                        }
-                        KnowledgeBaseAnswerNoRecallThen::ReturnAlternateAnswerInstead(s) => {
-                            response.answers.push(AnswerData {
-                                text: s.clone(),
-                                answer_type: AnswerType::TextPlain,
-                            });
-                            true
-                        }
-                    }
+                    self.fallback_answer(ctx, response)
                 }
             }
             Err(e) => {
                 log::error!("KnowledgeBaseAnswerNode answer failed: {:?}", &e);
-                add_next_node(ctx, &self.next_node_id);
-                false
+                self.fallback_answer(ctx, response)
             }
         }
     }
