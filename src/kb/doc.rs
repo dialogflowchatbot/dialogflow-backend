@@ -95,15 +95,21 @@ pub(super) fn parse_docx(buf: Vec<u8>) -> Result<String> {
                             for r in run.children.iter() {
                                 match r {
                                     docx_rs::RunChild::Text(text) => {
-                                        // log::info!("Docx text={}", text.text);
+                                        log::info!("Docx text={}", text.text);
                                         doc_text.push_str(&text.text);
-                                        doc_text.push('\n');
-                                        doc_text.push('\n');
+                                        // doc_text.push('\n');
+                                        // doc_text.push('\n');
                                     }
                                     docx_rs::RunChild::Sym(sym) => {
+                                        log::info!("meet sym");
                                         doc_text.push_str(&sym.char);
                                     }
                                     docx_rs::RunChild::Break(_) => {
+                                        log::info!("meet break");
+                                        doc_text.push('\n');
+                                    }
+                                    docx_rs::RunChild::Tab(_) => {
+                                        log::info!("meet tab");
                                         doc_text.push('\n');
                                     }
                                     _ => {}
