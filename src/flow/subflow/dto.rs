@@ -496,4 +496,6 @@ pub(crate) struct KnowledgeBaseAnswerNode {
     pub(crate) recall_thresholds: u8,
     #[serde(rename = "noAnswerThen")]
     pub(crate) no_answer_then: crate::flow::rt::node::KnowledgeBaseAnswerNoRecallThen,
+    #[serde(rename = "retrieveAnswerSources")]
+    pub(crate) retrieve_answer_sources: Vec<crate::flow::rt::node::KnowledgeBaseAnswerSource>,
 }

@@ -547,15 +547,52 @@ pub(crate) enum KnowledgeBaseAnswerNoRecallThen {
     ReturnAlternateAnswerInstead(String),
 }
 
+#[derive(Archive, Clone, Deserialize, Serialize, serde::Deserialize)]
+#[rkyv(compare(PartialEq))]
+pub(crate) enum KnowledgeBaseAnswerSource {
+    QnA,
+    Doc,
+}
+
 #[derive(Archive, Clone, Deserialize, Serialize)]
 #[rkyv(compare(PartialEq))]
 pub(crate) struct KnowledgeBaseAnswerNode {
     pub(super) recall_distance: f64,
+    pub(super) retrieve_answer_sources: Vec<crate::flow::rt::node::KnowledgeBaseAnswerSource>,
     pub(super) no_recall_then: KnowledgeBaseAnswerNoRecallThen,
     pub(super) next_node_id: String,
 }
 
 impl KnowledgeBaseAnswerNode {
+    fn retrieve_qa_answer(&self, req: &Request) -> Option<String> {
+        let result = tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(crate::kb::qa::retrieve_answer(
+                &req.robot_id,
+                &req.user_input,
+            ))
+        });
+        match result {
+            Ok((answer, distance)) => {
+                log::info!(
+                    "distance {} recall_distance {}",
+                    distance,
+                    self.recall_distance
+                );
+                if answer.is_some() && distance <= self.recall_distance {
+                    Some(answer.unwrap().answer)
+                } else {
+                    None
+                }
+            }
+            Err(e) => {
+                log::error!("KnowledgeBaseAnswerNode retrieve answer failed: {:?}", &e);
+                None
+            }
+        }
+    }
+    fn retrieve_doc_answer(&self, req: &Request) -> Option<String> {
+        None
+    }
     fn fallback_answer(&self, ctx: &mut Context, response: &mut Response) -> bool {
         match &self.no_recall_then {
             KnowledgeBaseAnswerNoRecallThen::GotoAnotherNode => {
@@ -579,6 +616,22 @@ impl KnowledgeBaseAnswerNode {
 impl RuntimeNode for KnowledgeBaseAnswerNode {
     fn exec(&mut self, req: &Request, ctx: &mut Context, response: &mut Response) -> bool {
         // log::info!("Into LlmChaKnowledgeBaseAnswerNodetNode");
+        for answer_source in &self.retrieve_answer_sources {
+            let r = match answer_source {
+                KnowledgeBaseAnswerSource::QnA => self.retrieve_qa_answer(req),
+                KnowledgeBaseAnswerSource::Doc => self.retrieve_doc_answer(req),
+            };
+            if r.is_some() && !r.as_ref().unwrap().is_empty() {
+                response.answers.push(AnswerData {
+                    text: r.unwrap(),
+                    answer_type: AnswerType::TextPlain,
+                });
+                add_next_node(ctx, &self.next_node_id);
+                return false;
+            }
+        }
+        self.fallback_answer(ctx, response)
+        /*
         let result = tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(crate::kb::qa::retrieve_answer(
                 &req.robot_id,
@@ -608,6 +661,7 @@ impl RuntimeNode for KnowledgeBaseAnswerNode {
                 self.fallback_answer(ctx, response)
             }
         }
+        */
     }
 }
 
