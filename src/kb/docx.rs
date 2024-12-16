@@ -4,12 +4,15 @@ use core::time::Duration;
 // use std::io::Read;
 // use std::path::Path;
 use std::fs::OpenOptions;
+use std::io::{BufReader, Cursor, Read};
 use std::sync::OnceLock;
 use std::vec::Vec;
 
-use docx_rs::read_docx;
 use futures_util::StreamExt;
+use quick_xml::events::Event;
+use quick_xml::Reader;
 use sqlx::{pool::PoolOptions, Row, Sqlite};
+use zip::ZipArchive;
 
 use crate::result::{Error, Result};
 
@@ -79,53 +82,37 @@ pub(crate) async fn init_tables(robot_id: &str) -> Result<()> {
     Ok(())
 }
 
-pub(super) fn parse_docx(buf: Vec<u8>) -> Result<String> {
+pub(super) fn parse_docx(b: Vec<u8>) -> Result<String> {
     // let mut file = File::open("./numbering.docx")?;
     // let mut buf = Vec::with_capacity(3096);
     // file.read_to_end(&mut buf)?;
     let mut doc_text = String::with_capacity(3096);
-    let docx = read_docx(&buf)?;
-    let doc = docx.document;
-    for d in doc.children.iter() {
-        match d {
-            docx_rs::DocumentChild::Paragraph(paragraph) => {
-                for p in paragraph.children() {
-                    match p {
-                        docx_rs::ParagraphChild::Run(run) => {
-                            for r in run.children.iter() {
-                                match r {
-                                    docx_rs::RunChild::Text(text) => {
-                                        log::info!("Docx text={}", text.text);
-                                        doc_text.push_str(&text.text);
-                                        // doc_text.push('\n');
-                                        // doc_text.push('\n');
-                                    }
-                                    docx_rs::RunChild::Sym(sym) => {
-                                        log::info!("meet sym");
-                                        doc_text.push_str(&sym.char);
-                                    }
-                                    docx_rs::RunChild::Break(_) => {
-                                        log::info!("meet break");
-                                        doc_text.push('\n');
-                                    }
-                                    docx_rs::RunChild::Tab(_) => {
-                                        log::info!("meet tab");
-                                        doc_text.push('\n');
-                                    }
-                                    _ => {}
-                                }
-                            }
-                        }
-                        docx_rs::ParagraphChild::Hyperlink(hyperlink) => {
-                            log::info!("hyperlink: {:?}", hyperlink.link)
-                        }
-                        _ => {}
-                    }
-                }
+    let reader = Cursor::new(b);
+    let mut archive = ZipArchive::new(reader)?;
+    let mut zip_file = archive.by_name("word/document.xml")?;
+    let mut cache = String::with_capacity(zip_file.size() as usize);
+    zip_file.read_to_string(&mut cache)?;
+
+    // 创建 XML 解析器
+    let mut reader = Reader::from_str(&cache);
+    reader.config_mut().trim_text(false);
+    let mut in_paragraph = false;
+
+    // 读取 XML 内容
+    loop {
+        match reader.read_event() {
+            Ok(Event::Start(ref e)) if e.name().as_ref() == b"w:p" => in_paragraph = true,
+            Ok(Event::End(ref e)) if e.name().as_ref() == b"w:p" => {
+                doc_text.push('\n');
+                in_paragraph = false;
             }
-            docx_rs::DocumentChild::Table(_table) => {}
-            docx_rs::DocumentChild::TableOfContents(_table_of_contents) => {}
-            _ => {}
+            Ok(Event::Empty(ref e)) if e.name().as_ref() == b"w:p" => doc_text.push('\n'),
+            Ok(Event::Text(e)) if in_paragraph => {
+                doc_text.push_str(&e.unescape()?);
+            }
+            Ok(Event::Eof) => break,
+            Err(e) => panic!("Error at position {}: {:?}", reader.error_position(), e),
+            _ => (),
         }
     }
     Ok(doc_text)

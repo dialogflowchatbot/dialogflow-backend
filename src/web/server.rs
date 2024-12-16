@@ -73,7 +73,7 @@ pub async fn start_app() {
         .await
         .expect("Failed initialize knowledge base QnA vector database.");
 
-    crate::kb::doc::init_datasource()
+    crate::kb::docx::init_datasource()
         .await
         .expect("Failed initialize knowledge base QnA vector database.");
 
@@ -379,7 +379,7 @@ async fn shutdown_signal(sender: tokio::sync::oneshot::Sender<()>) {
 
     crate::intent::phrase::shutdown_db().await;
     crate::kb::qa::shutdown_db().await;
-    crate::kb::doc::shutdown_db().await;
+    crate::kb::docx::shutdown_db().await;
 
     let m = if *IS_EN {
         "This program has been terminated"

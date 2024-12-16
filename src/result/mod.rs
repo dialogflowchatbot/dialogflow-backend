@@ -195,8 +195,14 @@ impl From<axum::extract::multipart::MultipartError> for Error {
     }
 }
 
-impl From<docx_rs::ReaderError> for Error {
-    fn from(err: docx_rs::ReaderError) -> Self {
+impl From<zip::result::ZipError> for Error {
+    fn from(err: zip::result::ZipError) -> Self {
+        Error::ErrorWithMessage(format!("Read docx file failed: {:?}", err))
+    }
+}
+
+impl From<quick_xml::errors::Error> for Error {
+    fn from(err: quick_xml::errors::Error) -> Self {
         Error::ErrorWithMessage(format!("Read docx file failed: {:?}", err))
     }
 }

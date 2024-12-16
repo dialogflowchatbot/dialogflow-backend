@@ -7,7 +7,7 @@ use axum::{
     Json,
 };
 
-use super::doc;
+use super::docx;
 use super::dto::QuestionAnswerPair;
 use crate::result::{Error, Result};
 use crate::robot::dto::RobotQuery;
@@ -62,7 +62,7 @@ async fn upload_doc_inner(robot_id: &str, mut multipart: Multipart) -> Result<()
             data.len()
         );
 
-        let text = doc::parse_docx(data.to_vec())?;
+        let text = docx::parse_docx(data.to_vec())?;
         log::info!("Extract text: {text}");
     }
 }
