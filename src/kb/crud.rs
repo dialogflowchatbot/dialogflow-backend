@@ -17,13 +17,11 @@ pub(crate) async fn upload_doc(
     Query(q): Query<RobotQuery>,
     multipart: Multipart,
 ) -> impl IntoResponse {
-    if let Err(e) = upload_doc_inner(&q.robot_id, multipart).await {
-        return to_res(Err(e));
-    }
-    to_res(Ok(()))
+    let r = upload_doc_inner(&q.robot_id, multipart).await;
+    to_res(r)
 }
 
-async fn upload_doc_inner(robot_id: &str, mut multipart: Multipart) -> Result<()> {
+async fn upload_doc_inner(robot_id: &str, mut multipart: Multipart) -> Result<String> {
     let p = Path::new(".")
         .join("data")
         .join(robot_id)
@@ -36,7 +34,7 @@ async fn upload_doc_inner(robot_id: &str, mut multipart: Multipart) -> Result<()
     loop {
         let field = multipart.next_field().await?;
         if field.is_none() {
-            return Ok(());
+            return Err(Error::ErrorWithMessage(String::from("File not found.")));
         }
         let field = field.unwrap();
         let Some(name) = field.name() else {
@@ -64,6 +62,7 @@ async fn upload_doc_inner(robot_id: &str, mut multipart: Multipart) -> Result<()
 
         let text = docx::parse_docx(data.to_vec())?;
         log::info!("Extract text: {text}");
+        return Ok(text);
     }
 }
 
