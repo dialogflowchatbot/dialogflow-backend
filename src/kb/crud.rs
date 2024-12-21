@@ -7,11 +7,16 @@ use axum::{
     Json,
 };
 
-use super::docx;
+use super::doc;
 use super::dto::QuestionAnswerPair;
 use crate::result::{Error, Result};
 use crate::robot::dto::RobotQuery;
 use crate::web::server::to_res;
+
+pub(crate) async fn list_doc(Query(q): Query<RobotQuery>) -> impl IntoResponse {
+    let r = super::doc::list(&q.robot_id).await;
+    to_res(r)
+}
 
 pub(crate) async fn upload_doc(
     Query(q): Query<RobotQuery>,
@@ -37,10 +42,6 @@ async fn upload_doc_inner(robot_id: &str, mut multipart: Multipart) -> Result<St
             return Err(Error::ErrorWithMessage(String::from("File not found.")));
         }
         let field = field.unwrap();
-        let Some(name) = field.name() else {
-            return Err(Error::ErrorWithMessage(String::from("Name is missing.")));
-        };
-        let name = name.to_string();
         let Some(file_name) = field.file_name() else {
             return Err(Error::ErrorWithMessage(String::from(
                 "File name is missing.",
@@ -56,12 +57,18 @@ async fn upload_doc_inner(robot_id: &str, mut multipart: Multipart) -> Result<St
         let data = field.bytes().await?;
 
         log::info!(
-            "Length of `{name}` (`{file_name}`: `{content_type}`) is {} bytes",
+            "Length of `{file_name}`: `{content_type}` is {} bytes",
             data.len()
         );
 
-        let text = docx::parse_docx(data.to_vec())?;
+        let text = match content_type.as_str() {
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => {
+                doc::parse_docx(data.to_vec())?
+            }
+            _ => return Err(Error::ErrorWithMessage(String::from("Unsupported format"))),
+        };
         log::info!("Extract text: {text}");
+        super::doc::save(robot_id, &file_name, data.len(), &text).await?;
         return Ok(text);
     }
 }

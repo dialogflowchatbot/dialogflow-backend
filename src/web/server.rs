@@ -73,7 +73,7 @@ pub async fn start_app() {
         .await
         .expect("Failed initialize knowledge base QnA vector database.");
 
-    crate::kb::docx::init_datasource()
+    crate::kb::doc::init_datasource()
         .await
         .expect("Failed initialize knowledge base QnA vector database.");
 
@@ -251,6 +251,10 @@ fn gen_router() -> Router {
             "/kb/qa",
             get(kb::list_qa).post(kb::save_qa).delete(kb::delete_qa),
         )
+        .route(
+            "/kb/doc",
+            get(kb::list_doc),
+        )
         .route("/kb/qa/dryrun", get(kb::qa_dryrun))
         .route("/kb/doc/upload", post(kb::upload_doc))
         .route("/management/settings/smtp/test", post(settings::smtp_test))
@@ -379,7 +383,7 @@ async fn shutdown_signal(sender: tokio::sync::oneshot::Sender<()>) {
 
     crate::intent::phrase::shutdown_db().await;
     crate::kb::qa::shutdown_db().await;
-    crate::kb::docx::shutdown_db().await;
+    crate::kb::doc::shutdown_db().await;
 
     let m = if *IS_EN {
         "This program has been terminated"

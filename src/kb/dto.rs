@@ -23,3 +23,14 @@ pub(crate) struct QuestionData {
     pub(super) question: String,
     pub(super) vec_row_id: Option<i64>,
 }
+
+#[derive(Serialize, sqlx::FromRow)]
+pub(crate) struct DocData {
+    pub(crate) id: i64,
+    #[serde(rename = "fileName")]
+    pub(crate) file_name: String,
+    #[serde(rename = "fileSize")]
+    pub(crate) file_size: i64,
+    #[serde(rename = "docContent")]
+    pub(crate) doc_content: String,
+}

@@ -31,22 +31,20 @@ macro_rules! db_executor (
 /*
 #[macro_export]
 macro_rules! sqlite_trans {
-    (fn $fn_name:ident($($arg: ident: $typ: ty),*) -> $rt: ty $body: block) => {
-        paste::item! {
-            #[inline(always)]
-            async fn [<exec_ $fn_name>](robot_id: &str, $($arg: $typ,)* transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,) -> $rt {
+    (fn $fn_name: ident(robot_id: &str, $($arg: ident: $typ: ty),*) -> $rt: ty $body: block) => {
+        pub(crate) async fn $fn_name($($arg: $typ,)*) -> $rt {
+            // #[inline(always)]
+            async fn inner_fn($($arg: $typ,)* transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,) -> $rt {
                 $body
             }
-            pub(crate) async fn $fn_name(robot_id: &str, $($arg: $typ,)*) -> $rt {
-                let mut transaction = DATA_SOURCE.get().unwrap().begin().await?;
-                let r = [<exec_ $fn_name>](robot_id, $($arg,)* &mut transaction).await;
-                if r.is_ok() {
-                    transaction.commit().await?;
-                } else {
-                    transaction.rollback().await?;
-                }
-                r
+            let mut transaction = DATA_SOURCE.get().unwrap().begin().await?;
+            let r = inner_fn($($arg,)* &mut transaction).await;
+            if r.is_ok() {
+                transaction.commit().await?;
+            } else {
+                transaction.rollback().await?;
             }
+            r
         }
     };
 }

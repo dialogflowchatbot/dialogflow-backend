@@ -102,6 +102,12 @@ pub(crate) async fn list(robot_id: &str) -> Result<Vec<QuestionAnswerPair>> {
     Ok(d)
 }
 
+// crate::sqlite_trans! {
+//     fn save2(robot_id: &str, d: QuestionAnswerPair) -> Result<()> {
+//         Ok(())
+//     }
+// }
+
 pub(crate) async fn save(robot_id: &str, d: QuestionAnswerPair) -> Result<String> {
     let ds = DATA_SOURCE.get().unwrap();
     let mut transaction = ds.begin().await?;
