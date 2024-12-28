@@ -9,16 +9,23 @@ use crate::result::{Error, Result};
 
 pub(crate) async fn detect(robot_id: &str, s: &str) -> Result<Option<String>> {
     // let now = std::time::Instant::now();
-    let op: Option<Vec<Intent>> = db_executor!(
+    let r: Vec<Intent> = match db_executor!(
         db::query,
         robot_id,
         super::crud::TABLE_SUFFIX,
         super::crud::INTENT_LIST_KEY
-    )?;
-    if op.is_none() {
-        return Ok(None);
-    }
-    let r = op.unwrap();
+    ) {
+        Ok(op) => {
+            if op.is_none() {
+                return Ok(None);
+            }
+            op.unwrap()
+        }
+        Err(e) => {
+            log::warn!("Detecting intent failed: {:?}", &e);
+            return Ok(None);
+        }
+    };
     let mut empty_phrase = true;
     for i in r.iter() {
         let r: Option<IntentDetail> = db_executor!(
@@ -29,6 +36,7 @@ pub(crate) async fn detect(robot_id: &str, s: &str) -> Result<Option<String>> {
         )?;
         if let Some(detail) = r {
             for k in detail.keywords.iter() {
+                // log::info!("intent compare {} {}", k, s);
                 if k.eq(s) {
                     // println!("{} {} {}", s, k, &i.name);
                     return Ok(Some(i.name.clone()));
@@ -46,10 +54,19 @@ pub(crate) async fn detect(robot_id: &str, s: &str) -> Result<Option<String>> {
     if empty_phrase {
         return Ok(None);
     }
-    let embedding = embedding(robot_id, s).await?;
-    if embedding.0.is_empty() {
-        return Ok(None);
-    }
+    let embedding = embedding(robot_id, s).await;
+    let embedding = match embedding {
+        Ok(embedding) => {
+            if embedding.0.is_empty() {
+                return Ok(None);
+            }
+            embedding
+        }
+        Err(e) => {
+            log::warn!("Detecting intent failed: {:?}", &e);
+            return Ok(None);
+        }
+    };
     // log::info!("Generate embedding cost {:?}", now.elapsed());
     // let s = format!("{:?}", &embedding);
     // let regex = regex::Regex::new(r"\s").unwrap();

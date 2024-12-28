@@ -14,8 +14,8 @@ use quick_xml::Reader;
 use sqlx::{pool::PoolOptions, Row, Sqlite};
 use zip::ZipArchive;
 
-use crate::result::{Error, Result};
 use super::dto::DocData;
+use crate::result::{Error, Result};
 
 type SqliteConnPool = sqlx::Pool<Sqlite>;
 
