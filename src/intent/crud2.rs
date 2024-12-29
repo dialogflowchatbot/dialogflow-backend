@@ -6,17 +6,20 @@ use axum::response::IntoResponse;
 use axum::Json;
 
 use super::detector;
-use super::dto::{IntentDetail, IntentFormData, IntentPhraseData};
+use super::dto::{Intent, IntentDetail, IntentFormData, IntentPhraseData};
 use crate::db;
 use crate::db_executor;
 use crate::result::{Error, Result};
 use crate::web::server::to_res;
 
+pub(crate) const INTENT_LIST_KEY: &str = "intents";
 // pub(crate) const TABLE: redb::TableDefinition<&str, &[u8]> =
 //     redb::TableDefinition::new(INTENT_LIST_KEY);
 pub(crate) const TABLE_SUFFIX: &str = "intents";
 
 pub(crate) fn init(robot_id: &str, is_en: bool) -> Result<()> {
+    let mut intents: Vec<Intent> = Vec::with_capacity(2);
+
     // Positive
     let keywords = if is_en {
         vec![
@@ -39,7 +42,8 @@ pub(crate) fn init(robot_id: &str, is_en: bool) -> Result<()> {
         ]
     };
     let regexes: Vec<&str> = vec![];
-    let mut intent_detail = IntentDetail::new(if is_en { "Positive" } else { "肯定" });
+    let mut intent = Intent::new(if is_en { "Positive" } else { "肯定" });
+    let mut intent_detail = IntentDetail::new(1, intent.id.clone(), intent.name.clone());
     let mut v = keywords.into_iter().map(|s| String::from(s)).collect();
     intent_detail.keywords.append(&mut v);
     let mut v = regexes.into_iter().map(|s| String::from(s)).collect();
@@ -52,6 +56,8 @@ pub(crate) fn init(robot_id: &str, is_en: bool) -> Result<()> {
     //     regexes: regexes.into_iter().map(|s| String::from(s)).collect(),
     //     phrases: vec![],
     // };
+    intent.keyword_num = intent_detail.keywords.len();
+    intent.regex_num = intent_detail.regexes.len();
 
     // let table_name = format!("{}intents", robot_id);
     // let table: redb::TableDefinition<&str, &[u8]> = redb::TableDefinition::new(&table_name);
@@ -61,9 +67,11 @@ pub(crate) fn init(robot_id: &str, is_en: bool) -> Result<()> {
         db::write,
         robot_id,
         TABLE_SUFFIX,
-        intent_detail.intent_id.as_str(),
+        intent.id.as_str(),
         &intent_detail
     )?;
+
+    intents.push(intent);
 
     // Negative
     let keywords = if is_en {
@@ -114,7 +122,8 @@ pub(crate) fn init(robot_id: &str, is_en: bool) -> Result<()> {
         ]
     };
     let regexes: Vec<&str> = vec![];
-    let mut intent_detail = IntentDetail::new(if is_en { "Negative" } else { "否定" });
+    let mut intent = Intent::new(if is_en { "Negative" } else { "否定" });
+    let mut intent_detail = IntentDetail::new(1, intent.id.clone(), intent.name.clone());
     let mut v = keywords.into_iter().map(|s| String::from(s)).collect();
     intent_detail.keywords.append(&mut v);
     let mut v = regexes.into_iter().map(|s| String::from(s)).collect();
@@ -127,24 +136,29 @@ pub(crate) fn init(robot_id: &str, is_en: bool) -> Result<()> {
     //     regexes: regexes.into_iter().map(|s| String::from(s)).collect(),
     //     phrases: vec![],
     // };
+    intent.keyword_num = intent_detail.keywords.len();
+    intent.regex_num = intent_detail.regexes.len();
 
     // db::write(table, intent.id.as_str(), &intent_detail)?;
     db_executor!(
         db::write,
         robot_id,
         TABLE_SUFFIX,
-        intent_detail.intent_id.as_str(),
+        intent.id.as_str(),
         &intent_detail
     )?;
 
+    intents.push(intent);
+
     // db::write(table, INTENT_LIST_KEY, &intents)
-    Ok(())
+    db_executor!(db::write, robot_id, TABLE_SUFFIX, INTENT_LIST_KEY, &intents)
 }
 
 pub(crate) async fn list(Query(q): Query<HashMap<String, String>>) -> impl IntoResponse {
     // let r: Result<Option<Vec<Intent>>> = db::query(TABLE, INTENT_LIST_KEY);
     if let Some(robot_id) = q.get("robotId") {
-        let r: Result<Vec<IntentDetail>> = db_executor!(db::get_all, robot_id, TABLE_SUFFIX,);
+        let r: Result<Option<Vec<Intent>>> =
+            db_executor!(db::query, robot_id, TABLE_SUFFIX, INTENT_LIST_KEY);
         to_res(r)
     } else {
         to_res(Err(Error::ErrorWithMessage(String::from(
@@ -160,14 +174,22 @@ pub(crate) async fn add(Json(params): Json<IntentFormData>) -> impl IntoResponse
 
 fn add_intent(robot_id: &str, intent_name: &str) -> Result<()> {
     // let d: Option<Vec<Intent>> = db::query(TABLE, INTENT_LIST_KEY)?;
-    let intent_detail = IntentDetail::new(intent_name);
+    let d: Option<Vec<Intent>> = db_executor!(db::query, robot_id, TABLE_SUFFIX, INTENT_LIST_KEY)?;
+    let mut intents = d.unwrap();
+    let intent_idx = intents.len();
+    let intent = Intent::new(intent_name);
+    intents.push(intent.clone());
+    // db::write(TABLE, INTENT_LIST_KEY, &intents)?;
+    db_executor!(db::write, robot_id, TABLE_SUFFIX, INTENT_LIST_KEY, &intents)?;
+
+    let intent_detail = IntentDetail::new(intent_idx, intent.id.clone(), intent.name.clone());
     // db::write(TABLE, intent.id.as_str(), &intent_detail)?;
     // Ok(())
     db_executor!(
         db::write,
         robot_id,
         TABLE_SUFFIX,
-        intent_detail.intent_id.as_str(),
+        intent.id.as_str(),
         &intent_detail
     )
 }
@@ -182,6 +204,34 @@ pub(crate) async fn remove(Json(params): Json<IntentFormData>) -> impl IntoRespo
                 TABLE_SUFFIX,
                 params.id.as_str()
             )
+            .and_then(|_| {
+                params
+                    .data
+                    .parse::<usize>()
+                    .map_err(|e| {
+                        log::error!("{:?}", &e);
+                        Error::ErrorWithMessage(String::from("Invalid idx parameter."))
+                    })
+                    .and_then(|idx| {
+                        let mut intents: Vec<Intent> = db_executor!(
+                            db::query,
+                            &params.robot_id,
+                            TABLE_SUFFIX,
+                            INTENT_LIST_KEY
+                        )
+                        .unwrap()
+                        .unwrap();
+                        intents.remove(idx);
+                        // db::write(TABLE, INTENT_LIST_KEY, &intents)
+                        db_executor!(
+                            db::write,
+                            &params.robot_id,
+                            TABLE_SUFFIX,
+                            INTENT_LIST_KEY,
+                            &intents
+                        )
+                    })
+            })
             // let r = db::remove(TABLE, params.id.as_str());
             // if let Ok(idx) = params.data.parse() {
             //     let mut intents: Vec<Intent> = db::query(TABLE, INTENT_LIST_KEY).unwrap().unwrap();
@@ -213,6 +263,26 @@ pub(crate) async fn detail(Query(params): Query<IntentFormData>) -> impl IntoRes
     to_res(r)
 }
 
+// fn change_num<I: serde::Serialize, F: FnMut(&mut Vec<Intent>), V>(
+fn change_num<I: serde::Serialize, F: FnMut(&mut Vec<Intent>)>(
+    robot_id: &str,
+    key: &str,
+    d: &mut I,
+    mut f: F,
+) -> Result<()> {
+    // let mut intents: Vec<Intent> = db::query(TABLE, INTENT_LIST_KEY).unwrap().unwrap();
+    let mut intents: Vec<Intent> = db_executor!(db::query, robot_id, TABLE_SUFFIX, INTENT_LIST_KEY)
+        .unwrap()
+        .unwrap();
+    f(&mut intents);
+    db::save_txn(vec![
+        // (TABLE, key, Box::new(d)),
+        // (TABLE, INTENT_LIST_KEY, Box::new(&intents)),
+        (robot_id, TABLE_SUFFIX, key, Box::new(d)),
+        (robot_id, TABLE_SUFFIX, INTENT_LIST_KEY, Box::new(&intents)),
+    ])
+}
+
 pub(crate) async fn add_keyword(Json(params): Json<IntentFormData>) -> impl IntoResponse {
     let key = params.id.as_str();
     // let r: Result<Option<IntentDetail>> = db::query(TABLE, key);
@@ -221,7 +291,10 @@ pub(crate) async fn add_keyword(Json(params): Json<IntentFormData>) -> impl Into
     let r = r.and_then(|op| {
         if let Some(mut d) = op {
             d.keywords.push(String::from(params.data.as_str()));
-            db_executor!(db::write, &params.robot_id, TABLE_SUFFIX, key, &d)
+            let idx = d.intent_idx;
+            change_num(&params.robot_id, key, &mut d, |i: &mut Vec<Intent>| {
+                i[idx].keyword_num = i[idx].keyword_num + 1
+            })
         } else {
             Ok(())
         }
@@ -243,9 +316,12 @@ pub(crate) async fn remove_keyword(Json(params): Json<IntentFormData>) -> impl I
                 db_executor!(db::query, &params.robot_id, TABLE_SUFFIX, key);
             result.and_then(|mut op| {
                 if op.is_some() {
-                    let d = op.as_mut().unwrap();
+                    let mut d = op.as_mut().unwrap();
                     d.keywords.remove(idx);
-                    db_executor!(db::write, &params.robot_id, TABLE_SUFFIX, key, &d)
+                    let idx = d.intent_idx;
+                    change_num(&params.robot_id, key, &mut d, |i: &mut Vec<Intent>| {
+                        i[idx].keyword_num = i[idx].keyword_num - 1
+                    })
                 } else {
                     Ok(())
                 }
@@ -262,7 +338,10 @@ pub(crate) async fn add_regex(Json(params): Json<IntentFormData>) -> impl IntoRe
         if let Some(mut d) = op {
             let _ = regex::Regex::new(params.data.as_str())?;
             d.regexes.push(String::from(params.data.as_str()));
-            db_executor!(db::write, &params.robot_id, TABLE_SUFFIX, key, &d)
+            let idx = d.intent_idx;
+            change_num(&params.robot_id, key, &mut d, |i: &mut Vec<Intent>| {
+                i[idx].regex_num = i[idx].regex_num + 1
+            })
         } else {
             Ok(())
         }
@@ -284,9 +363,12 @@ pub(crate) async fn remove_regex(Json(params): Json<IntentFormData>) -> impl Int
                 db_executor!(db::query, &params.robot_id, TABLE_SUFFIX, key);
             result.and_then(|mut op| {
                 if op.is_some() {
-                    let d = op.as_mut().unwrap();
+                    let mut d = op.as_mut().unwrap();
                     d.regexes.remove(idx);
-                    db_executor!(db::write, &params.robot_id, TABLE_SUFFIX, key, &d)
+                    let idx = d.intent_idx;
+                    change_num(&params.robot_id, key, &mut d, |i: &mut Vec<Intent>| {
+                        i[idx].regex_num = i[idx].regex_num - 1
+                    })
                 } else {
                     Ok(())
                 }
@@ -333,7 +415,12 @@ pub(crate) async fn add_phrase(
                         id: vec_row_id,
                         phrase: String::from(params.data.as_str()),
                     });
-                    db_executor!(db::write, &params.robot_id, TABLE_SUFFIX, intent_id, &d)
+                    change_num(
+                        &params.robot_id,
+                        intent_id,
+                        &mut d,
+                        |i: &mut Vec<Intent>| i[idx].phrase_num = i[idx].phrase_num + 1,
+                    )
                 })
         });
     to_res(r)
@@ -404,8 +491,13 @@ pub(crate) async fn remove_phrase(Json(params): Json<IntentFormData>) -> impl In
             if let Err(e) = r {
                 return to_res(Err(e));
             }
-            let result = db_executor!(db::write, &params.robot_id, TABLE_SUFFIX, key, &d);
-            return to_res(result);
+            let intent_idx = d.intent_idx;
+            return to_res(change_num(
+                &params.robot_id,
+                key,
+                &mut d,
+                |i: &mut Vec<Intent>| i[intent_idx].phrase_num = i[intent_idx].phrase_num - 1,
+            ));
         }
     }
     to_res(Ok(()))

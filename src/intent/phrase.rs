@@ -172,10 +172,23 @@ pub(crate) async fn remove(robot_id: &str, id: i64) -> Result<()> {
 
 pub(crate) async fn remove_by_intent_id(robot_id: &str, intent_id: &str) -> Result<()> {
     let sql = format!("DELETE FROM {} WHERE intent_id = ?", robot_id);
-    sqlx::query::<Sqlite>(&sql)
+    match sqlx::query::<Sqlite>(&sql)
         .bind(intent_id)
         .execute(DATA_SOURCE.get().unwrap())
-        .await?;
+        .await
+    {
+        Ok(_) => return Ok(()),
+        Err(e) => match e {
+            sqlx::Error::Database(database_error) => {
+                if let Some(code) = database_error.code() {
+                    if code.eq("1") {
+                        return Ok::<_, Error>(());
+                    }
+                }
+            }
+            _ => return Err(e.into()),
+        },
+    };
     Ok(())
 }
 

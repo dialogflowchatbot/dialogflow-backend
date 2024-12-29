@@ -1,6 +1,6 @@
 use regex::Regex;
 
-use super::dto::{Intent, IntentDetail};
+use super::dto::IntentDetail;
 use super::phrase;
 use crate::ai::embedding::embedding;
 use crate::db;
@@ -9,17 +9,14 @@ use crate::result::{Error, Result};
 
 pub(crate) async fn detect(robot_id: &str, s: &str) -> Result<Option<String>> {
     // let now = std::time::Instant::now();
-    let r: Vec<Intent> = match db_executor!(
-        db::query,
-        robot_id,
-        super::crud::TABLE_SUFFIX,
-        super::crud::INTENT_LIST_KEY
-    ) {
-        Ok(op) => {
-            if op.is_none() {
+    let r: Result<Vec<IntentDetail>> =
+        db_executor!(db::get_all, robot_id, super::crud::TABLE_SUFFIX,);
+    let intents = match r {
+        Ok(v) => {
+            if v.is_empty() {
                 return Ok(None);
             }
-            op.unwrap()
+            v
         }
         Err(e) => {
             log::warn!("Detecting intent failed: {:?}", &e);
@@ -27,29 +24,21 @@ pub(crate) async fn detect(robot_id: &str, s: &str) -> Result<Option<String>> {
         }
     };
     let mut empty_phrase = true;
-    for i in r.iter() {
-        let r: Option<IntentDetail> = db_executor!(
-            db::query,
-            robot_id,
-            super::crud::TABLE_SUFFIX,
-            i.id.as_str()
-        )?;
-        if let Some(detail) = r {
-            for k in detail.keywords.iter() {
-                // log::info!("intent compare {} {}", k, s);
-                if k.eq(s) {
-                    // println!("{} {} {}", s, k, &i.name);
-                    return Ok(Some(i.name.clone()));
-                }
+    for detail in intents.iter() {
+        for k in detail.keywords.iter() {
+            // log::info!("intent compare {} {}", k, s);
+            if k.eq(s) {
+                // println!("{} {} {}", s, k, &i.name);
+                return Ok(Some(detail.intent_name.clone()));
             }
-            for r in detail.regexes.iter() {
-                let re = Regex::new(r)?;
-                if re.is_match(s) {
-                    return Ok(Some(i.name.clone()));
-                }
-            }
-            empty_phrase = i.phrase_num < 1;
         }
+        for r in detail.regexes.iter() {
+            let re = Regex::new(r)?;
+            if re.is_match(s) {
+                return Ok(Some(detail.intent_name.clone()));
+            }
+        }
+        empty_phrase = detail.phrases.len() < 1;
     }
     if empty_phrase {
         return Ok(None);
