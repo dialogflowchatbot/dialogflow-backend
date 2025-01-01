@@ -194,8 +194,20 @@ pub(crate) async fn remove_by_intent_id(robot_id: &str, intent_id: &str) -> Resu
 
 pub(crate) async fn remove_tables(robot_id: &str) -> Result<()> {
     let sql = format!("DROP TABLE {}", robot_id);
-    sqlx::query::<Sqlite>(&sql)
+    match sqlx::query::<Sqlite>(&sql)
         .execute(DATA_SOURCE.get().unwrap())
-        .await?;
+        .await {
+            Ok(_) => return Ok(()),
+            Err(e) => match e {
+                sqlx::Error::Database(database_error) => {
+                    if let Some(code) = database_error.code() {
+                        if code.eq("1") {
+                            return Ok::<_, Error>(());
+                        }
+                    }
+                }
+                _ => return Err(e.into()),
+            },
+        };
     Ok(())
 }
