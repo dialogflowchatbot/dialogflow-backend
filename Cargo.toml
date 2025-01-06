@@ -20,7 +20,7 @@ name = "dialogflow"
 # End
 # artful = "0.1.1"
 anyhow = "1.0"
-axum = {version = "0.7", features = ["query", "tokio", "macros", "multipart"]}
+axum = {version = "0.8", features = ["query", "tokio", "macros", "multipart"]}
 bigdecimal = "0.4"
 # bytes = "1.9"
 # candle-core = { git = "https://github.com/huggingface/candle.git", version = "0.5.1" }
