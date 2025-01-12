@@ -220,7 +220,7 @@ fn gen_router() -> Router {
         .route("/subflow/new", post(subflow::new))
         .route("/external/http", get(http::list))
         .route(
-            "/external/http/:id",
+            "/external/http/{id}",
             get(http::detail).post(http::save).delete(http::remove),
         )
         .route(
