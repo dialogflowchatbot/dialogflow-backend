@@ -36,7 +36,7 @@ candle-transformers = { version = "0.8" }
 frand = "0.10"
 tokenizers = "0.21"
 # candle_embed = "0.1"
-colored = "2.2"
+colored = "3.0"
 # dashmap = "5.5.1"
 enum_dispatch = "0.3"
 erased-serde = "0.4"
