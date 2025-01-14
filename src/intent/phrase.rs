@@ -1,7 +1,8 @@
 use core::time::Duration;
 
+use std::collections::HashMap;
 use std::fs::OpenOptions;
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 use std::vec::Vec;
 
 use futures_util::StreamExt;
@@ -16,13 +17,14 @@ type SqliteConnPool = sqlx::Pool<Sqlite>;
 // static DATA_SOURCE: OnceCell<SqliteConnPool> = OnceCell::new();
 static DATA_SOURCE: OnceLock<SqliteConnPool> = OnceLock::new();
 // static DATA_SOURCES: OnceLock<Mutex<HashMap<String, SqliteConnPool>>> = OnceLock::new();
+static INDEXES: OnceLock<Mutex<HashMap<String, usearch::Index>>> = OnceLock::new();
 
 fn get_sqlite_path() -> std::path::PathBuf {
     let p = std::path::Path::new(".").join("data");
     if !p.exists() {
         std::fs::create_dir_all(&p).expect("Create data directory failed.");
     }
-    p.join("ipev.dat")
+    p.join("ripd.dat")
 }
 
 pub(crate) async fn init_datasource() -> Result<()> {
@@ -56,10 +58,11 @@ pub(crate) async fn init_tables(robot_id: &str) -> Result<()> {
     // println!("Init database");
     // let ddl = include_str!("./embedding_ddl.sql");
     let sql = format!(
-        "CREATE TABLE {}_vec_row_id (
-            id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT
-            -- intent_id TEXT NOT NULL,
-        );",
+        "CREATE TABLE IF NOT EXISTS {} (
+                id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                intent_id TEXT NOT NULL,
+                phrase TEXT NOT NULL
+            );",
         robot_id
     );
     // log::info!("sql = {}", &sql);
@@ -109,37 +112,39 @@ pub(crate) async fn add(
     }
     log::info!("vectors.0.len() = {}", vectors.0.len());
     let last_insert_rowid = if vec_row_id.is_none() {
-        let sql = format!("INSERT INTO {}_vec_row_id (id)VALUES(NULL)", robot_id);
+        let sql = format!("INSERT INTO {} (intent_id, phrase)VALUES(?, ?)", robot_id);
         let last_insert_rowid = sqlx::query::<Sqlite>(&sql)
+            .bind(intent_id)
+            .bind(phrase)
             .execute(DATA_SOURCE.get().unwrap())
             .await?
             .last_insert_rowid();
-        let sql = format!(
-            "CREATE VIRTUAL TABLE IF NOT EXISTS {} USING vec0 (
-                -- id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-                intent_id TEXT NOT NULL,
-                +intent_name TEXT NOT NULL,
-                vectors float[{}]
-            );
-            INSERT INTO {} (rowid, intent_id, intent_name, vectors)VALUES(?, ?, ?, ?)",
-            //  ON CONFLICT(rowid) DO UPDATE SET vectors = excluded.vectors;
-            robot_id,
-            vectors.0.len(),
-            robot_id
-        );
-        sqlx::query::<Sqlite>(&sql)
-            .bind(last_insert_rowid)
-            .bind(intent_id)
-            .bind(intent_name)
-            .bind(serde_json::to_string(&vectors.0)?)
-            .execute(DATA_SOURCE.get().unwrap())
-            .await?;
+        if let Some(lock) = INDEXES.get() {
+            if let Ok(mut idxes) = lock.lock() {
+                if !idxes.contains_key(robot_id) {
+                    let options = usearch::IndexOptions {
+                        dimensions: vectors.0.len(), // necessary for most metric kinds
+                        metric: usearch::MetricKind::Cos,
+                        quantization: usearch::ScalarKind::F32, // or ::F32, ::F16, ::I8, ::B1x8 ...
+                        connectivity: 0,                        // zero for auto
+                        expansion_add: 0,                       // zero for auto
+                        expansion_search: 0,                    // zero for auto
+                        multi: false,
+                    };
+                    let index: usearch::Index = usearch::new_index(&options).unwrap();
+                    if std::path::Path::new("ipvd.vec").exists() {
+                        index.load("");
+                    }
+                    idxes.insert(String::from(robot_id), index);
+                }
+            }
+        }
         last_insert_rowid
     } else {
-        let sql = format!("UPDATE {} SET vectors = ? WHERE = ?", robot_id);
+        let sql = format!("UPDATE {} SET phrase = ? WHERE = ?", robot_id);
         let vec_row_id = vec_row_id.unwrap();
         sqlx::query::<Sqlite>(&sql)
-            .bind(serde_json::to_string(&vectors.0)?)
+            .bind(phrase)
             .bind(vec_row_id)
             .execute(DATA_SOURCE.get().unwrap())
             .await?;
@@ -196,18 +201,19 @@ pub(crate) async fn remove_tables(robot_id: &str) -> Result<()> {
     let sql = format!("DROP TABLE {}", robot_id);
     match sqlx::query::<Sqlite>(&sql)
         .execute(DATA_SOURCE.get().unwrap())
-        .await {
-            Ok(_) => return Ok(()),
-            Err(e) => match e {
-                sqlx::Error::Database(database_error) => {
-                    if let Some(code) = database_error.code() {
-                        if code.eq("1") {
-                            return Ok::<_, Error>(());
-                        }
+        .await
+    {
+        Ok(_) => return Ok(()),
+        Err(e) => match e {
+            sqlx::Error::Database(database_error) => {
+                if let Some(code) = database_error.code() {
+                    if code.eq("1") {
+                        return Ok::<_, Error>(());
                     }
                 }
-                _ => return Err(e.into()),
-            },
-        };
+            }
+            _ => return Err(e.into()),
+        },
+    };
     Ok(())
 }
