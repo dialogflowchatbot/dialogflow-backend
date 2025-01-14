@@ -36,7 +36,7 @@ candle-transformers = { version = "0.8" }
 frand = "0.10"
 tokenizers = "0.21"
 # candle_embed = "0.1"
-colored = "2.2"
+colored = "3.0"
 # dashmap = "5.5.1"
 enum_dispatch = "0.3"
 erased-serde = "0.4"
@@ -90,7 +90,7 @@ flate2 = "1.0"
 # cc = "1.2.8"
 
 [target.'cfg(windows)'.dependencies]
-windows = {version = "0.58", features = ["Win32_Globalization","Win32_System_SystemServices"]}
+windows = {version = "0.59", features = ["Win32_Globalization","Win32_System_SystemServices"]}
 
 # https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html#platform-specific-dependencies
 # https://doc.rust-lang.org/reference/conditional-compilation.html
