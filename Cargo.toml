@@ -79,7 +79,7 @@ lopdf = "0.34.0"
 # lancedb = "0.13.0"
 libsqlite3-sys = { version = "0.31", features = ["bundled"] }
 sqlite-vec = "0.1.6"
-validator = "0.19.0"
+validator = "0.20.0"
 zip = "2.2"
 quick-xml = "0.37"
 usearch = "2.16"
