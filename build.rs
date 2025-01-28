@@ -76,7 +76,12 @@ fn get_content_type(filename: String) -> String {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    println!("cargo:rerun-if-changed=build.rs,resources/assets/index.html");
+    println!("cargo::rerun-if-changed=build.rs,resources/assets/index.html");
+    // println!("cargo::rustc-link-search=/usr/local/musl/lib");
+    // println!("cargo::rustc-link-search=/usr/local/musl/include");
+    // println!("cargo::rustc-link-search=./lib");
+    // println!("cargo::rustc-link-lib=static=sqlite_vec0");
+    // println!("cargo:rustc-link-lib=static=sqlite_vec0");
 
     // embed all static resource asset files
     let asset_root = Path::new("src").join("resources").join("assets");

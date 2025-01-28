@@ -52,7 +52,7 @@ itoa = "1.0"
 # paste = "1.0"
 redb = "2.4"
 regex = "1.11"
-reqwest = { version = "0.12", features = ["stream"] }
+reqwest = { version = "0.12", default-features = false, features = ["native-tls", "stream"] }
 rkyv = {version = "0.8", features = ["aligned", "alloc", "bytecheck"]}
 scru128 = "3.1"
 serde = { version = "1", features = ["derive"] }
@@ -71,19 +71,22 @@ tokio-stream = "0.1"
 # tracing-subscriber = "0.3"
 log = "0.4"
 env_logger = "0.11"
-lettre = { version = "0.11", features = ["tokio1", "smtp-transport", "tokio1-native-tls", "pool"]}
+lettre = { version = "0.11", default-features = false, features = ["builder", "tokio1", "smtp-transport", "tokio1-native-tls", "pool"]}
 unicase = "2.8.0"
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "sqlite", "macros"] }
 lopdf = "0.34.0"
 # docx-rs = "0.4.17"
 # lancedb = "0.13.0"
 libsqlite3-sys = { version = "0.30", features = ["bundled"] }
-sqlite-vec = "0.1.6"
 validator = "0.19.0"
 zip = "2.2"
 quick-xml = "0.37"
-usearch = "2.16"
+# usearch = "2.17"
+# cxx = "1.0"
 # triple_accel = "0.4.0"
+# [target.'cfg(not(target_os = "linux"))'.dependencies]
+sqlite-vec = "0.1.6"
+# sqlite-vec = { path = "/mnt/d/work/sqlite-vec/bindings/rust/" }
 
 [build-dependencies]
 flate2 = "1.0"

@@ -108,7 +108,7 @@ impl Context {
 
     pub(in crate::flow::rt) fn pop_node(&mut self) -> Option<RuntimeNnodeEnum> {
         // log::info!("nodes len {}", self.nodes.len());
-        let now = std::time::Instant::now();
+        // let now = std::time::Instant::now();
         if self.node.is_some() {
             let node = std::mem::replace(&mut self.node, None);
             let v = node.unwrap();
@@ -122,7 +122,7 @@ impl Context {
         if let Some(node_id) = self.nodes.pop_front() {
             // log::info!("main_flow_id {} node_id {}", &self.main_flow_id, &node_id);
             if let Ok(r) = super::crud::get_runtime_node(&self.main_flow_id, &node_id) {
-                log::info!("pop_node time {:?}", now.elapsed());
+                // log::info!("pop_node time {:?}", now.elapsed());
                 return r;
             }
         }

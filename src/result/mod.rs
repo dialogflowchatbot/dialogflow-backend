@@ -206,3 +206,9 @@ impl From<quick_xml::errors::Error> for Error {
         Error::ErrorWithMessage(format!("Read docx file failed: {:?}", err))
     }
 }
+
+// impl From<cxx::Exception> for Error {
+//     fn from(err: cxx::Exception) -> Self {
+//         Error::ErrorWithMessage(format!("USearch occorred an error {:?}", err))
+//     }
+// }

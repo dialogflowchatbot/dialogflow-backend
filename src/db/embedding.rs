@@ -24,11 +24,11 @@ fn get_sqlite_path() -> std::path::PathBuf {
 }
 
 pub(crate) async fn init_datasource() -> Result<()> {
-    unsafe {
-        libsqlite3_sys::sqlite3_auto_extension(Some(std::mem::transmute(
-            sqlite_vec::sqlite3_vec_init as *const (),
-        )));
-    }
+    // unsafe {
+    //     libsqlite3_sys::sqlite3_auto_extension(Some(std::mem::transmute(
+    //         sqlite_vec::sqlite3_vec_init as *const (),
+    //     )));
+    // }
 
     match OpenOptions::new()
         .read(false)

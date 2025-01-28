@@ -67,7 +67,7 @@ pub(crate) async fn detect(robot_id: &str, s: &str) -> Result<Option<String>> {
     // log::info!("Searching vector took {:?}", now.elapsed());
     if !result.is_empty() {
         if let Some(record) = result.get_mut(0) {
-            log::info!("Record distance: {}", record.1);
+            // log::info!("Record distance: {}", record.1);
             if (1f64 - record.1) >= similarity_threshold {
                 let s = std::mem::replace(&mut record.0, String::new());
                 return Ok(Some(s));
