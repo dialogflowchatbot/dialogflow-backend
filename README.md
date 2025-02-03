@@ -1,6 +1,8 @@
 # Dialog flow chat bot backend
 
-<img src="https://img.shields.io/badge/Rust-1.75.0-blue" />
+This project has been migrated to: https://github.com/dialogflowchatbot/dialogflow
+
+<!-- <img src="https://img.shields.io/badge/Rust-1.75.0-blue" />
 
 ![Demo](https://github.com/dialogflowchatbot/dialogflow-showcase/blob/d8380bf728a87fb8e9df2a2d8796bd58c61015d9/screenshots/demo1.gif)
 
@@ -28,4 +30,4 @@ Press `Ctrl+C` to terminate application.
 
 ## Where are front end files?
 🎨 This repository contains compiled front end files, path is: `src/resources/assets`  
-🎄 For those original editable front end files, please goto this repository: [Dialog flow chat bot front end project](https://github.com/dialogflowchatbot/dialogflow-frontend)
+🎄 For those original editable front end files, please goto this repository: [Dialog flow chat bot front end project](https://github.com/dialogflowchatbot/dialogflow-frontend) -->
