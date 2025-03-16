@@ -1,6 +1,6 @@
 # Dialog flow chat bot backend
 
-This project has been migrated to: https://github.com/dialogflowchatbot/dialogflow
+This project has been migrated to: https://github.com/easyflow-ai/easyflow
 
 <!-- <img src="https://img.shields.io/badge/Rust-1.75.0-blue" />
 
